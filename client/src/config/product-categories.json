@@ -1,0 +1,103 @@
+{
+  "productTypes": [
+    {
+      "value": "food",
+      "label": "Food & Beverage",
+      "icon": "🍽️"
+    },
+    {
+      "value": "non-food",
+      "label": "Non-Food",
+      "icon": "🏪"
+    },
+    {
+      "value": "fresh",
+      "label": "Fresh Produce",
+      "icon": "🥬"
+    },
+    {
+      "value": "frozen",
+      "label": "Frozen",
+      "icon": "❄️"
+    },
+    {
+      "value": "household",
+      "label": "Household",
+      "icon": "🏠"
+    },
+    {
+      "value": "personal-care",
+      "label": "Personal Care",
+      "icon": "💅"
+    }
+  ],
+  "categories": {
+    "food": [
+      { "value": "bakery", "label": "Bakery & Bread" },
+      { "value": "snacks", "label": "Snacks & Chips" },
+      { "value": "candy", "label": "Candy & Chocolate" },
+      { "value": "canned", "label": "Canned Goods" },
+      { "value": "condiments", "label": "Condiments & Sauces" },
+      { "value": "cereals", "label": "Cereals & Breakfast" },
+      { "value": "pasta-rice", "label": "Pasta & Rice" },
+      { "value": "oils", "label": "Cooking Oils" },
+      { "value": "spices", "label": "Spices & Seasonings" },
+      { "value": "baking", "label": "Baking Supplies" }
+    ],
+    "non-food": [
+      { "value": "beverages-soft", "label": "Soft Drinks & Juices" },
+      { "value": "beverages-hot", "label": "Tea & Coffee" },
+      { "value": "beverages-water", "label": "Water & Sports Drinks" },
+      { "value": "beverages-energy", "label": "Energy Drinks" }
+    ],
+    "fresh": [
+      { "value": "fruits", "label": "Fresh Fruits" },
+      { "value": "vegetables", "label": "Fresh Vegetables" },
+      { "value": "meat", "label": "Fresh Meat" },
+      { "value": "poultry", "label": "Fresh Poultry" },
+      { "value": "seafood", "label": "Fresh Seafood" },
+      { "value": "dairy", "label": "Dairy Products" },
+      { "value": "eggs", "label": "Eggs" },
+      { "value": "cheese", "label": "Cheese" },
+      { "value": "deli", "label": "Deli & Cold Cuts" }
+    ],
+    "frozen": [
+      { "value": "frozen-meals", "label": "Frozen Meals" },
+      { "value": "frozen-vegetables", "label": "Frozen Vegetables" },
+      { "value": "frozen-meat", "label": "Frozen Meat & Seafood" },
+      { "value": "ice-cream", "label": "Ice Cream & Desserts" },
+      { "value": "frozen-snacks", "label": "Frozen Snacks" }
+    ],
+    "household": [
+      { "value": "cleaning", "label": "Cleaning Supplies" },
+      { "value": "laundry", "label": "Laundry Detergents" },
+      { "value": "paper-products", "label": "Paper Products" },
+      { "value": "kitchen-supplies", "label": "Kitchen Supplies" },
+      { "value": "storage", "label": "Storage & Containers" },
+      { "value": "pet-supplies", "label": "Pet Food & Supplies" }
+    ],
+    "personal-care": [
+      { "value": "hygiene", "label": "Personal Hygiene" },
+      { "value": "toiletries", "label": "Toiletries" },
+      { "value": "cosmetics", "label": "Cosmetics & Makeup" },
+      { "value": "hair-care", "label": "Hair Care" },
+      { "value": "skin-care", "label": "Skin Care" },
+      { "value": "oral-care", "label": "Oral Care" },
+      { "value": "baby-care", "label": "Baby Care Products" },
+      { "value": "feminine-care", "label": "Feminine Care" },
+      { "value": "health", "label": "Health & Wellness" }
+    ]
+  },
+  "quickCategories": [
+    { "value": "beverages", "label": "Beverages", "type": "non-food" },
+    { "value": "snacks", "label": "Snacks", "type": "food" },
+    { "value": "dairy", "label": "Dairy", "type": "fresh" },
+    { "value": "meat", "label": "Meat", "type": "fresh" },
+    { "value": "fruits", "label": "Fruits", "type": "fresh" },
+    { "value": "vegetables", "label": "Vegetables", "type": "fresh" },
+    { "value": "bakery", "label": "Bakery", "type": "food" },
+    { "value": "cleaning", "label": "Cleaning", "type": "household" },
+    { "value": "hygiene", "label": "Personal Care", "type": "personal-care" },
+    { "value": "frozen-meals", "label": "Frozen Foods", "type": "frozen" }
+  ]
+}

@@ -1,0 +1,555 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Modern Vibrant Palette - 2025 Design System */
+  --background: hsl(0, 0%, 98%); /* #FAFAFA - Ultra Clean Background */
+  --foreground: hsl(220, 13%, 9%); /* #0F172A - Deep Dark Text */
+  --muted: hsl(220, 13%, 95%); /* #F1F5F9 - Subtle Background */
+  --muted-foreground: hsl(220, 9%, 46%); /* #64748B - Balanced Secondary Text */
+  --popover: hsl(0, 0%, 100%); /* #FFFFFF - Pure White */
+  --popover-foreground: hsl(220, 13%, 9%); /* #0F172A - Deep Dark Text */
+  --card: hsl(0, 0%, 100%); /* #FFFFFF - Pure White */
+  --card-foreground: hsl(220, 13%, 9%); /* #0F172A - Deep Dark Text */
+  --border: hsl(220, 13%, 91%); /* #E2E8F0 - Subtle Borders */
+  --input: hsl(220, 13%, 91%); /* #E2E8F0 - Input Borders */
+  --primary: hsl(262, 83%, 58%); /* #8B5CF6 - Modern Purple Primary */
+  --primary-foreground: hsl(0, 0%, 100%); /* Pure White on Primary */
+  --secondary: hsl(220, 13%, 95%); /* #F1F5F9 - Light Secondary */
+  --secondary-foreground: hsl(220, 13%, 9%); /* #0F172A - Dark Text */
+  --accent: hsl(199, 89%, 48%); /* #0EA5E9 - Vibrant Blue Accent */
+  --accent-foreground: hsl(0, 0%, 100%); /* White on Accent */
+  --destructive: hsl(0, 84%, 60%); /* #F87171 - Modern Red */
+  --destructive-foreground: hsl(0, 0%, 100%); /* White on Destructive */
+  --ring: hsl(262, 83%, 58%); /* #8B5CF6 - Focus Ring */
+  --radius: 0.875rem; /* 14px - Modern Rounded Corners */
+  --success: hsl(142, 71%, 45%); /* #10B981 - Emerald Success */
+  --warning: hsl(38, 92%, 50%); /* #F59E0B - Amber Warning */
+  --warning-foreground: hsl(0, 0%, 100%); /* White on Warning */
+  --error: hsl(0, 84%, 60%); /* #F87171 - Modern Red Error */
+  --success-foreground: hsl(0, 0%, 100%); /* White on Success */
+  
+  /* Sidebar-specific colors */
+  --sidebar: hsl(0, 0%, 100%); /* #FFFFFF - Card/Panel Background */
+  --sidebar-primary: hsl(213, 100%, 50%); /* #007AFF - Primary Accent/Action */
+  --sidebar-accent: hsl(220, 14%, 94%); /* Lighter variant of background */
+  --sidebar-accent-foreground: hsl(217, 33%, 25%); /* #334155 - Primary Text/Icon */
+  --sidebar-background: hsl(0, 0%, 100%); /* #FFFFFF - Card/Panel Background */
+  --sidebar-foreground: hsl(217, 33%, 25%); /* #334155 - Primary Text/Icon */
+  --sidebar-muted: hsl(220, 14%, 94%); /* Lighter variant of background */
+  --sidebar-muted-foreground: hsl(215, 20%, 45%); /* #64748B - Secondary Text/Borders - Improved contrast */
+  --sidebar-border: hsl(215, 20%, 65%); /* #64748B - Secondary Text/Borders (improved contrast) */
+  --sidebar-ring: hsl(213, 100%, 50%); /* #007AFF - Primary Accent/Action */
+  
+  /* Modern 2025 Gradients */
+  --gradient-primary: linear-gradient(135deg, hsl(262, 83%, 58%) 0%, hsl(262, 83%, 65%) 35%, hsl(199, 89%, 48%) 100%);
+  --gradient-secondary: linear-gradient(135deg, hsl(220, 13%, 95%) 0%, hsl(220, 13%, 91%) 100%);
+  --gradient-success: linear-gradient(135deg, hsl(142, 71%, 45%) 0%, hsl(156, 73%, 59%) 100%);
+  --gradient-warning: linear-gradient(135deg, hsl(38, 92%, 50%) 0%, hsl(25, 95%, 53%) 100%);
+  --gradient-danger: linear-gradient(135deg, hsl(0, 84%, 60%) 0%, hsl(348, 83%, 47%) 100%);
+  --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.05) 100%);
+  
+  /* Advanced shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+}
+
+.dark {
+  /* Modern Dark Mode - 2025 Design System */
+  --background: hsl(220, 13%, 4%); /* #0A0A0A - True Dark Background */
+  --foreground: hsl(0, 0%, 95%); /* #F2F2F2 - Soft White Text */
+  --muted: hsl(220, 13%, 9%); /* #171717 - Dark Muted */
+  --muted-foreground: hsl(220, 9%, 65%); /* #A3A3A3 - Balanced Gray */
+  --popover: hsl(220, 13%, 9%); /* #171717 - Dark Popover */
+  --popover-foreground: hsl(0, 0%, 95%); /* #F2F2F2 - Light Text */
+  --card: hsl(220, 13%, 9%); /* #171717 - Dark Card */
+  --card-foreground: hsl(0, 0%, 95%); /* #F2F2F2 - Light Text */
+  --border: hsl(220, 13%, 15%); /* #262626 - Subtle Dark Borders */
+  --input: hsl(220, 13%, 15%); /* #262626 - Input Borders */
+  --primary: hsl(262, 83%, 65%); /* #A855F7 - Brighter Purple for Dark */
+  --primary-foreground: hsl(0, 0%, 100%); /* Pure White */
+  --secondary: hsl(220, 13%, 12%); /* #1F1F1F - Dark Secondary */
+  --secondary-foreground: hsl(0, 0%, 95%); /* #F2F2F2 - Light Text */
+  --accent: hsl(199, 89%, 55%); /* #38BDF8 - Brighter Blue for Dark */
+  --accent-foreground: hsl(0, 0%, 100%); /* White on Accent */
+  --destructive: hsl(0, 84%, 65%); /* #FCA5A5 - Softer Red for Dark */
+  --destructive-foreground: hsl(0, 0%, 100%); /* White on Destructive */
+  --ring: hsl(262, 83%, 65%); /* #A855F7 - Focus Ring */
+  --success: hsl(142, 71%, 50%); /* #34D399 - Brighter Success for Dark */
+  --warning: hsl(38, 92%, 55%); /* #FCD34D - Brighter Warning for Dark */
+  --warning-foreground: hsl(0, 0%, 100%); /* White on Warning */
+  --error: hsl(0, 84%, 65%); /* #FCA5A5 - Softer Red Error for Dark */
+  --success-foreground: hsl(0, 0%, 100%); /* White on Success */
+  
+  /* Sidebar-specific colors for dark mode */
+  --sidebar: hsl(217, 33%, 16%); /* Darker card background */
+  --sidebar-primary: hsl(213, 100%, 58%); /* Slightly lighter primary for dark mode */
+  --sidebar-accent: hsl(217, 33%, 22%); /* Darker secondary */
+  --sidebar-accent-foreground: hsl(220, 14%, 97%); /* Light text */
+  --sidebar-background: hsl(217, 33%, 16%); /* Darker card background */
+  --sidebar-foreground: hsl(220, 14%, 97%); /* Light text */
+  --sidebar-muted: hsl(217, 33%, 22%); /* Darker muted */
+  --sidebar-muted-foreground: hsl(215, 20%, 65%); /* Lighter secondary text in dark mode */
+  --sidebar-border: hsl(217, 33%, 25%); /* Darker border based on primary text */
+  --sidebar-ring: hsl(213, 100%, 58%); /* Slightly lighter ring for dark mode */
+  
+  /* Modern Dark Mode Gradients */
+  --gradient-primary: linear-gradient(135deg, hsl(262, 83%, 65%) 0%, hsl(262, 83%, 72%) 35%, hsl(199, 89%, 55%) 100%);
+  --gradient-secondary: linear-gradient(135deg, hsl(220, 13%, 12%) 0%, hsl(220, 13%, 18%) 100%);
+  --gradient-success: linear-gradient(135deg, hsl(142, 71%, 50%) 0%, hsl(156, 73%, 64%) 100%);
+  --gradient-warning: linear-gradient(135deg, hsl(38, 92%, 55%) 0%, hsl(25, 95%, 58%) 100%);
+  --gradient-danger: linear-gradient(135deg, hsl(0, 84%, 65%) 0%, hsl(348, 83%, 55%) 100%);
+  --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%);
+  
+  /* Enhanced shadows for dark mode */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.2);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    /* Fix iOS viewport issues */
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    /* Enable momentum scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
+    /* Prevent horizontal scrolling */
+    overflow-x: hidden;
+    /* Improved text rendering */
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  html {
+    /* Fix iOS viewport issues */
+    height: -webkit-fill-available;
+  }
+  
+  #root {
+    /* Ensure root container handles mobile properly */
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    overflow-x: hidden;
+  }
+}
+
+@layer utilities {
+  .touch-friendly {
+    @apply min-h-[44px] min-w-[44px];
+  }
+  
+  .retail-shadow {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  }
+  
+  .retail-shadow-lg {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  }
+  
+  /* Touch-friendly sizing for POS interface */
+  .touch-friendly {
+    @apply min-h-[2.75rem] text-base;
+  }
+  
+  /* Line clamp utilities */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  /* Custom responsive utilities */
+  .container-responsive {
+    @apply px-4 sm:px-6 lg:px-8;
+  }
+  
+  /* Mobile-first scrollable containers */
+  .mobile-scroll {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  
+  /* Enhanced gradient animation for modern UI */
+  .gradient-animation {
+    background: linear-gradient(-45deg, #1e293b, #334155, #475569, #64748b);
+    background-size: 400% 400%;
+    animation: gradientShift 15s ease infinite;
+  }
+  
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  
+  /* Smooth glow effect for active elements */
+  .glow-effect {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+    transition: box-shadow 0.3s ease;
+  }
+  
+  .glow-effect:hover {
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+  }
+  
+  /* Glass morphism effect */
+  .glass-morphism {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Dark glass morphism */
+  .glass-morphism-dark {
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  
+  /* Enhanced scrollbar styling */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.6) rgba(30, 41, 59, 0.2);
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(30, 41, 59, 0.2);
+    border-radius: 4px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.6);
+    border-radius: 4px;
+    transition: background 0.2s ease;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.9);
+  }
+
+  /* Prevent zoom on input focus for iOS */
+  @supports (-webkit-touch-callout: none) {
+    input, textarea, select {
+      font-size: 16px !important;
+    }
+  }
+  
+  /* Mobile-safe height containers */
+  .mobile-safe-height {
+    height: 100vh;
+    height: -webkit-fill-available;
+  }
+  
+  /* Mobile viewport fix for modals */
+  .mobile-modal {
+    max-height: 100vh;
+    max-height: -webkit-fill-available;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Touch-friendly tap targets */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px;
+  }
+
+  /* Enhanced mobile grid utilities */
+  .mobile-grid-2 {
+    @apply grid grid-cols-2 gap-3 sm:gap-4;
+  }
+  
+  .mobile-grid-3 {
+    @apply grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4;
+  }
+  
+  .mobile-grid-4 {
+    @apply grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4;
+  }
+  
+  .mobile-grid-5 {
+    @apply grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4;
+  }
+
+  /* Enhanced mobile layouts */
+  .mobile-stack {
+    @apply flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4;
+  }
+  
+  .mobile-center {
+    @apply text-center sm:text-left;
+  }
+  
+  .mobile-padding {
+    @apply px-4 py-3 sm:px-6 sm:py-4;
+  }
+  
+  .mobile-margin {
+    @apply mx-3 my-2 sm:mx-4 sm:my-3;
+  }
+
+  /* Enhanced mobile touch targets */
+  .touch-friendly {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px 16px;
+  }
+  
+  .mobile-friendly-card {
+    @apply p-4 sm:p-6 rounded-lg shadow-sm bg-white border border-slate-200 hover:shadow-md transition-all duration-200;
+  }
+  
+  .mobile-friendly-button {
+    @apply h-12 px-6 rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-md;
+  }
+
+  /* 2025 Modern Button States */
+  .btn-modern {
+    @apply bg-blue-600 text-white shadow-sm hover:shadow-md transition-all duration-200 hover:bg-blue-700 active:bg-blue-800 rounded-lg font-semibold;
+  }
+  
+  .btn-modern-ghost {
+    @apply bg-transparent border-2 border-blue-200 text-blue-700 shadow-none hover:bg-blue-50 transition-all duration-200 rounded-lg font-semibold;
+  }
+  
+  .btn-modern-outline {
+    @apply bg-transparent hover:bg-blue-600 border-2 border-blue-600 text-blue-600 hover:text-white shadow-sm hover:shadow-md transition-all duration-200 rounded-lg font-semibold;
+  }
+
+  /* Improved accessibility for form inputs and placeholders */
+  input::placeholder,
+  textarea::placeholder {
+    color: hsl(215, 20%, 50%) !important; /* Improved contrast for placeholders */
+    opacity: 1;
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: hsl(215, 20%, 55%) !important; /* Better dark mode placeholder contrast */
+    opacity: 1;
+  }
+
+  /* Focus states for better accessibility */
+  input:focus,
+  textarea:focus,
+  select:focus,
+  button:focus {
+    outline: 2px solid hsl(213, 100%, 50%);
+    outline-offset: 2px;
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    :root {
+      --muted-foreground: hsl(215, 20%, 30%);
+      --border: hsl(215, 20%, 50%);
+      --input: hsl(215, 20%, 50%);
+    }
+  }
+  
+  .btn-modern-secondary {
+    @apply bg-slate-100 text-slate-700 shadow-sm hover:shadow-md transition-all duration-200 hover:bg-slate-200 active:bg-slate-300 rounded-lg font-semibold;
+  }
+  
+  .btn-modern-success {
+    @apply bg-emerald-600 text-white shadow-sm hover:shadow-md transition-all duration-200 hover:bg-emerald-700 active:bg-emerald-800 rounded-lg font-semibold;
+  }
+  
+  .btn-modern-danger {
+    @apply bg-rose-600 text-white shadow-sm hover:shadow-md transition-all duration-200 hover:bg-rose-700 active:bg-rose-800 rounded-lg font-semibold;
+  }
+
+  /* Enhanced glassmorphism utilities */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(226, 232, 240, 0.5);
+  }
+  
+  .glass-card-dark {
+    background: rgba(248, 250, 252, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(226, 232, 240, 0.5);
+  }
+
+  /* Modern button hover effects */
+  .btn-hover-scale {
+    @apply transition-all duration-200 hover:scale-[1.02] active:scale-[0.98];
+  }
+  
+  .btn-hover-glow {
+    @apply transition-all duration-200 hover:shadow-md;
+  }
+
+  /* Responsive spacing utilities */
+  .space-mobile {
+    @apply space-y-2 sm:space-y-4;
+  }
+  
+  .padding-mobile {
+    @apply p-3 sm:p-6;
+  }
+  
+  .margin-mobile {
+    @apply m-2 sm:m-4;
+  }
+
+  /* Modern 2025 Card Styling */
+  .modern-card {
+    @apply bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200;
+  }
+  
+  .modern-card-interactive {
+    @apply bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-300;
+  }
+
+  /* Premium Glass Cards */
+  .glass-card-premium {
+    @apply backdrop-blur-sm rounded-lg shadow-sm transition-all duration-200;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(226, 232, 240, 0.5);
+  }
+  
+  .glass-card-premium:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+  
+  .glass-card-premium-dark {
+    @apply backdrop-blur-sm rounded-lg shadow-sm transition-all duration-200;
+    background: rgba(248, 250, 252, 0.95);
+    border: 1px solid rgba(226, 232, 240, 0.5);
+  }
+  
+  .glass-card-premium-dark:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Enhanced gradient utilities */
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.8) 100%);
+  }
+  
+  .gradient-secondary {
+    background: linear-gradient(135deg, hsl(var(--secondary)) 0%, hsl(var(--secondary) / 0.8) 100%);
+  }
+  
+  .gradient-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  }
+  
+  .gradient-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  }
+  
+  .gradient-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  }
+
+  /* 2025 Advanced Shadow System */
+  .shadow-modern-sm {
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+  }
+  
+  .shadow-modern-md {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  }
+  
+  .shadow-modern-lg {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  }
+  
+  .shadow-modern-xl {
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  }
+  
+  .shadow-modern-2xl {
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.12);
+  }
+  
+  .shadow-glow-primary {
+    box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.15), 0 4px 6px -4px rgba(139, 92, 246, 0.1);
+  }
+  
+  .shadow-glow-accent {
+    box-shadow: 0 10px 15px -3px rgba(14, 165, 233, 0.15), 0 4px 6px -4px rgba(14, 165, 233, 0.1);
+  }
+  
+  .shadow-glow-success {
+    box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.15), 0 4px 6px -4px rgba(16, 185, 129, 0.1);
+  }
+  
+  .shadow-custom-inner {
+    box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+  }
+
+  /* Enhanced loading states */
+  .skeleton-pulse {
+    @apply animate-pulse bg-muted;
+    animation: shimmer 1.5s infinite;
+  }
+  
+  @keyframes shimmer {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+  }
+
+  /* Improved focus states */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
+  }
+  
+  .focus-ring-inset {
+    @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset;
+  }
+}
+
+/* Print styles for receipts */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  
+  .receipt-content, .receipt-content * {
+    visibility: visible;
+  }
+  
+  .receipt-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white !important;
+    color: black !important;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  
+  @page {
+    margin: 0.5in;
+    size: letter;
+  }
+}
