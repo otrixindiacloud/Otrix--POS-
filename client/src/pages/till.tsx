@@ -69,8 +69,8 @@ const HISTORY_LIMIT = 15;
 
 const formatAmount = (value?: string | number | null) => {
   const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return "QR 0.00";
-  return `QR ${numeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (!Number.isFinite(numeric)) return "QAR 0.00";
+  return `QAR ${numeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const formatDate = (value?: string | null) => {

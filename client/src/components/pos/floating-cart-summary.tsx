@@ -23,13 +23,13 @@ export default function FloatingCartSummary() {
     cartItems,
     getCartItemCount,
     getCartSubtotal,
-    getCartTax,
+    getCartVAT,
     getCartTotal,
     openPaymentModal,
   } = usePOSStore();
 
   const subtotal = getCartSubtotal();
-  const tax = getCartTax();
+  const vat = getCartVAT();
   const total = getCartTotal();
   const itemCount = getCartItemCount();
 
@@ -140,7 +140,7 @@ export default function FloatingCartSummary() {
                     QR {total.toFixed(2)}
                   </p>
                   <p className="text-sm text-foreground/60 font-medium">
-                    {itemCount} {itemCount === 1 ? 'item' : 'items'} • VAT: QR {tax.toFixed(2)}
+                    {itemCount} {itemCount === 1 ? 'item' : 'items'} • VAT: QR {vat.toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -172,7 +172,7 @@ export default function FloatingCartSummary() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-foreground/60 font-medium">VAT Tax:</span>
-                  <span className="font-bold text-foreground">QR {tax.toFixed(2)}</span>
+                  <span className="font-bold text-foreground">QR {vat.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-black pt-3 border-t border-white/20">
                   <span className="text-primary">Total:</span>

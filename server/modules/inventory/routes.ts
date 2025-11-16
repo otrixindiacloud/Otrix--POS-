@@ -112,18 +112,28 @@ export function registerInventoryRoutes(app: Express) {
             continue;
           }
 
+          // Clean and validate price
+          const cleanPrice = typeof productData.price === 'string' 
+            ? productData.price.replace(/[^0-9.]/g, '') 
+            : String(productData.price);
+          
           const validatedData = insertProductSchema.parse({
             ...productData,
+            price: cleanPrice,
+            cost: productData.cost ? (typeof productData.cost === 'string' ? productData.cost.replace(/[^0-9.]/g, '') : String(productData.cost)) : undefined,
             quantity: productData.quantity || productData.stock || 0,
             stock: productData.stock || productData.quantity || 0,
+            category: productData.category || 'General',
           });
           
           const product = await storage.createProduct(validatedData);
           createdProducts.push(product);
         } catch (error: any) {
+          console.error(`Error creating product ${productData.name}:`, error);
           errors.push({
             product: productData.name || "Unknown",
             error: error.message || "Validation failed",
+            details: error.issues ? error.issues.map((i: any) => i.message).join(', ') : undefined,
           });
         }
       }
@@ -136,6 +146,7 @@ export function registerInventoryRoutes(app: Express) {
         errors: errors.length > 0 ? errors : undefined,
       });
     } catch (error: any) {
+      console.error('Bulk import error:', error);
       res.status(400).json({ 
         message: "Invalid request", 
         error: error.message 

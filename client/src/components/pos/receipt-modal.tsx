@@ -282,7 +282,7 @@ export default function ReceiptModal({
     lines.push("");
     lines.push("================================");
     lines.push(`Subtotal: QR ${subtotal.toFixed(2)}`);
-    lines.push(`Tax: QR ${tax.toFixed(2)}`);
+    lines.push(`VAT: QR ${vatAmount.toFixed(2)}`);
     lines.push(`Total: QR ${total.toFixed(2)}`);
     lines.push("");
     lines.push(`Payment: ${safePaymentMethod(transaction.paymentMethod)}`);
@@ -478,12 +478,18 @@ export default function ReceiptModal({
     }
   }, [autoPrint, isOpen, transaction, toast]);
 
+  // Use actual transaction data for correct calculations
   const subtotal = transactionItems.reduce((sum, item) => {
-    const price = parseFloat((item as any).unitPrice || item.total) / item.quantity || 0;
+    // Use unitPrice if available, otherwise calculate from total
+    const price = parseFloat((item as any).unitPrice || String(item.total)) || 0;
     return sum + (price * item.quantity);
   }, 0);
-  const tax = subtotal * 0.08; // 8% tax
-  const total = subtotal + tax;
+  
+  // Use actual VAT from transaction (5% in Qatar), not hardcoded 8%
+  const vatAmount = parseFloat(String(transaction?.vatAmount || "0"));
+  const discountAmount = parseFloat(String(transaction?.discountAmount || "0"));
+  const grandTotal = subtotal + vatAmount;
+  const total = grandTotal - discountAmount;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -605,11 +611,21 @@ export default function ReceiptModal({
                 <span>QR {subtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Tax (8%):</span>
-                <span>QR {tax.toFixed(2)}</span>
+                <span>VAT (5%):</span>
+                <span>QR {vatAmount.toFixed(2)}</span>
               </div>
+              <div className="flex justify-between">
+                <span>Grand Total:</span>
+                <span>QR {grandTotal.toFixed(2)}</span>
+              </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>Discount:</span>
+                  <span>-QR {discountAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-lg">
-                <span>Total:</span>
+                <span>Total Amount:</span>
                 <span>QR {total.toFixed(2)}</span>
               </div>
             </div>

@@ -39,16 +39,25 @@ export default function StockUploadModal({ isOpen, onClose }: StockUploadModalPr
 
   const uploadMutation = useMutation({
     mutationFn: async (formData: FormData) => {
+      console.log('📤 Uploading stock file...');
+      
       const response = await fetch("/api/inventory/upload-stock", {
         method: "POST",
         body: formData,
+        credentials: 'include', // Ensure cookies are sent for authentication
       });
       
+      console.log('📥 Upload response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error("Upload failed");
+        const errorData = await response.json().catch(() => ({ message: 'Upload failed' }));
+        console.error('❌ Upload failed:', errorData);
+        throw new Error(errorData.message || `Upload failed with status ${response.status}`);
       }
       
-      return response.json();
+      const result = await response.json();
+      console.log('✅ Upload result:', result);
+      return result;
     },
     onSuccess: (result: UploadResult) => {
       setUploadResult(result);
@@ -66,10 +75,11 @@ export default function StockUploadModal({ isOpen, onClose }: StockUploadModalPr
         });
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
+      console.error('❌ Upload mutation error:', error);
       toast({
         title: "Upload Failed",
-        description: "Failed to upload stock file. Please try again.",
+        description: error.message || "Failed to upload stock file. Please try again.",
         variant: "destructive",
       });
     }

@@ -256,8 +256,8 @@ function TransactionDetailsModal({ transaction }: { transaction: TransactionWith
                 <span className="font-medium text-gray-900">QR {subtotal.toFixed(2)}</span>
               </div>
               {tax > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Tax</span>
+                <div className="flex justify-between py-1">
+                  <span className="text-gray-600">VAT</span>
                   <span className="font-medium text-gray-900">QR {tax.toFixed(2)}</span>
                 </div>
               )}

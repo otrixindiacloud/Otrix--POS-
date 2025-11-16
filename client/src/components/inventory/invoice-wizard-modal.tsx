@@ -120,7 +120,33 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
     onSuccess: (data) => {
       setExtractedData(data.extractedData);
       setProductMatches(data.productMatches);
-      setEditingItems(data.extractedData.items);
+      
+      // Validate and ensure unit prices are correctly calculated
+      const validatedItems = data.extractedData.items.map((item: any) => {
+        const qty = Number(item.quantity) || 1;
+        const total = Number(item.totalPrice) || 0;
+        let unitPrice = Number(item.unitPrice) || 0;
+        
+        // If unit price is 0 or doesn't match the math, recalculate
+        const calculatedTotal = unitPrice * qty;
+        const difference = Math.abs(calculatedTotal - total);
+        
+        if (difference > 0.02 || unitPrice === 0) {
+          if (qty > 0 && total > 0) {
+            unitPrice = parseFloat((total / qty).toFixed(2));
+            console.log(`Frontend recalculation for "${item.productName}": ${total} ÷ ${qty} = ${unitPrice}`);
+          }
+        }
+        
+        return {
+          ...item,
+          quantity: qty,
+          unitPrice: unitPrice,
+          totalPrice: total
+        };
+      });
+      
+      setEditingItems(validatedItems);
       setInvoiceImageUrl(data.imageUrl);
       
       // Auto-populate header details from extracted data
@@ -313,7 +339,24 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
 
   const updateItemValue = (index: number, field: string, value: any) => {
     const updatedItems = [...editingItems];
-    updatedItems[index] = { ...updatedItems[index], [field]: value };
+    const item = { ...updatedItems[index], [field]: value };
+    
+    // Auto-calculate based on what changed
+    if (field === 'quantity' || field === 'unitPrice') {
+      // When quantity or unit price changes, recalculate total
+      const qty = Number(field === 'quantity' ? value : item.quantity) || 0;
+      const unitPrice = Number(field === 'unitPrice' ? value : item.unitPrice) || 0;
+      item.totalPrice = parseFloat((qty * unitPrice).toFixed(2));
+    } else if (field === 'totalPrice') {
+      // When total price changes, recalculate unit price (if quantity exists)
+      const qty = Number(item.quantity) || 0;
+      const total = Number(value) || 0;
+      if (qty > 0 && total > 0) {
+        item.unitPrice = parseFloat((total / qty).toFixed(2));
+      }
+    }
+    
+    updatedItems[index] = item;
     setEditingItems(updatedItems);
   };
 
@@ -369,13 +412,13 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
     switch (currentStep) {
       case 1:
         return (
-          <div className="space-y-8 max-w-3xl mx-auto">
+          <div className="space-y-3 max-w-3xl mx-auto">
             <div className="text-center">
-              <h3 className="text-2xl font-bold text-slate-900 mb-2">Select Invoice Type</h3>
-              <p className="text-sm text-slate-600">Choose the type of invoice you want to create</p>
+              <h3 className="text-xl font-bold text-slate-900 mb-1">Select Invoice Type</h3>
+              <p className="text-xs text-slate-600">Choose the type of invoice you want to create</p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <Card 
                 className={`cursor-pointer transition-all border-2 ${
                   invoiceType === 'receipt' 
@@ -384,16 +427,16 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                 }`}
                 onClick={() => setInvoiceType('receipt')}
               >
-                <CardContent className="flex flex-col items-center p-8">
-                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                    <Receipt className="w-8 h-8 text-blue-600" />
+                <CardContent className="flex flex-col items-center p-2">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mb-1">
+                    <Receipt className="w-5 h-5 text-blue-600" />
                   </div>
-                  <h4 className="text-lg font-bold text-slate-900 mb-2">Receipt</h4>
-                  <p className="text-sm text-slate-600 text-center">
+                  <h4 className="text-sm font-bold text-slate-900 mb-0.5">Receipt</h4>
+                  <p className="text-xs text-slate-600 text-center">
                     Incoming goods from supplier
                   </p>
                   {invoiceType === 'receipt' && (
-                    <div className="mt-4">
+                    <div className="mt-2">
                       <Badge className="bg-blue-600">Selected</Badge>
                     </div>
                   )}
@@ -408,16 +451,16 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                 }`}
                 onClick={() => setInvoiceType('return')}
               >
-                <CardContent className="flex flex-col items-center p-8">
-                  <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
-                    <RotateCcw className="w-8 h-8 text-orange-600" />
+                <CardContent className="flex flex-col items-center p-2">
+                  <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center mb-1">
+                    <RotateCcw className="w-5 h-5 text-orange-600" />
                   </div>
-                  <h4 className="text-lg font-bold text-slate-900 mb-2">Return</h4>
-                  <p className="text-sm text-slate-600 text-center">
+                  <h4 className="text-sm font-bold text-slate-900 mb-0.5">Return</h4>
+                  <p className="text-xs text-slate-600 text-center">
                     Returning goods to supplier
                   </p>
                   {invoiceType === 'return' && (
-                    <div className="mt-4">
+                    <div className="mt-2">
                       <Badge className="bg-orange-600">Selected</Badge>
                     </div>
                   )}
@@ -429,24 +472,24 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
 
       case 2:
         return (
-          <div className="space-y-6 max-w-3xl mx-auto">
+          <div className="space-y-3 max-w-3xl mx-auto">
             <div className="text-center">
-              <h3 className="text-2xl font-bold text-slate-900 mb-2">Scan or Upload Invoice</h3>
-              <p className="text-sm text-slate-600">Upload an image of your {invoiceType} for automatic data extraction</p>
+              <h3 className="text-xl font-bold text-slate-900 mb-1">Scan or Upload Invoice</h3>
+              <p className="text-xs text-slate-600">Upload an image of your {invoiceType} for automatic data extraction</p>
             </div>
 
             <Card className="border-2 border-dashed border-slate-300 bg-slate-50 shadow-sm">
-              <CardContent className="p-8">
+              <CardContent className="p-3">
                 {imagePreview ? (
-                  <div className="space-y-4">
-                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                  <div className="space-y-1.5">
+                    <div className="bg-white rounded-lg p-2 border border-slate-200">
                       <img 
                         src={imagePreview} 
                         alt="Invoice preview" 
-                        className="max-w-full h-64 object-contain mx-auto rounded" 
+                        className="max-w-full h-48 object-contain mx-auto rounded" 
                       />
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <div className="flex flex-col sm:flex-row gap-2 justify-center">
                       <Button 
                         variant="outline" 
                         onClick={() => setImagePreview(null)}
@@ -475,15 +518,15 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-6 text-center">
+                  <div className="space-y-3 text-center">
                     <div className="flex justify-center">
-                      <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Upload className="w-10 h-10 text-blue-600" />
+                      <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Upload className="w-8 h-8 text-blue-600" />
                       </div>
                     </div>
                     <div>
-                      <h4 className="text-lg font-semibold text-slate-900 mb-2">Upload Invoice Image</h4>
-                      <p className="text-sm text-slate-600 mb-6">
+                      <h4 className="text-base font-semibold text-slate-900 mb-1">Upload Invoice Image</h4>
+                      <p className="text-xs text-slate-600 mb-2">
                         Drag and drop or click to browse your files
                       </p>
                       <Button 
@@ -512,11 +555,11 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
             {/* AI Processing Result */}
             {extractedData && (
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm sm:text-base text-green-600">✓ Invoice Processed Successfully</CardTitle>
+                <CardHeader className="py-2">
+                  <CardTitle className="text-xs sm:text-sm text-green-600">✓ Invoice Processed Successfully</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 text-xs sm:text-sm">
+                <CardContent className="py-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 sm:gap-2 text-xs">
                     <div><strong>Invoice #:</strong> {extractedData.invoiceNumber}</div>
                     <div><strong>Supplier:</strong> {extractedData.supplierName}</div>
                     <div><strong>Date:</strong> {extractedData.invoiceDate}</div>
@@ -530,20 +573,20 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
 
       case 3:
         return (
-          <div className="max-w-4xl mx-auto space-y-8">
+          <div className="max-w-4xl mx-auto space-y-1.5">
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-indigo-100 mb-4">
-                <FileText className="w-6 h-6 text-indigo-600" />
+              <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 mb-1">
+                <FileText className="w-5 h-5 text-indigo-600" />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Header Details</h3>
-              <p className="text-sm text-slate-600">Review and edit the invoice header information</p>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">Header Details</h3>
+              <p className="text-xs text-slate-600">Review and edit the invoice header information</p>
             </div>
 
             <Card className="border-slate-200 shadow-sm">
-              <CardContent className="p-6 space-y-6">
+              <CardContent className="p-3 space-y-1.5">
                 {/* Supplier Selection */}
                 <div>
-                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Supplier *
                   </Label>
                   <Select value={selectedSupplier?.toString()} onValueChange={(value) => setSelectedSupplier(parseInt(value))}>
@@ -561,9 +604,9 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                 </div>
 
                 {/* Invoice Number & Date */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
-                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                       Invoice Number *
                     </Label>
                     <Input 
@@ -574,7 +617,7 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                     />
                   </div>
                   <div>
-                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                       Invoice Date *
                     </Label>
                     <Input 
@@ -587,9 +630,9 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                 </div>
 
                 {/* Due Date */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
-                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                       Due Date
                     </Label>
                     <Input 
@@ -603,11 +646,11 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                 </div>
 
                 {/* Financial Totals */}
-                <div className="pt-4 border-t border-slate-200">
-                  <h4 className="text-sm font-semibold text-slate-900 mb-4">Financial Summary</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="pt-2 border-t border-slate-200">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-2">Financial Summary</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <div>
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                         Subtotal (QR)
                       </Label>
                       <Input 
@@ -619,7 +662,7 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                       />
                     </div>
                     <div>
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                         Tax (QR)
                       </Label>
                       <Input 
@@ -631,7 +674,7 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                       />
                     </div>
                     <div>
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                         Total (QR)
                       </Label>
                       <Input 
@@ -651,26 +694,26 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
 
       case 4:
         return (
-          <div className="max-w-6xl mx-auto space-y-8">
+          <div className="max-w-6xl mx-auto space-y-1.5">
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 mb-4">
-                <ShoppingCart className="w-6 h-6 text-blue-600" />
+              <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 mb-1">
+                <ShoppingCart className="w-5 h-5 text-blue-600" />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Invoice Items</h3>
-              <p className="text-sm text-slate-600">Add and edit the items on this {invoiceType}</p>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">Invoice Items</h3>
+              <p className="text-xs text-slate-600">Add and edit the items on this {invoiceType}</p>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-1.5">
               {editingItems.map((item, index) => {
                 const match = productMatches[index];
                 return (
                   <Card key={index} className="border-slate-200 shadow-sm">
-                    <CardContent className="p-6">
+                    <CardContent className="p-3">
                       {/* Item Header */}
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
                           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100">
-                            <span className="text-sm font-semibold text-slate-700">{index + 1}</span>
+                            <span className="text-xs font-semibold text-slate-700">{index + 1}</span>
                           </div>
                           {match?.action === 'match' && (
                             <Badge className="bg-green-50 text-green-700 border-green-200">
@@ -696,8 +739,8 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                       </div>
                       
                       {/* Product Name */}
-                      <div className="mb-4">
-                        <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                      <div className="mb-2">
+                        <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                           Product Name *
                         </Label>
                         <Input 
@@ -709,9 +752,9 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                       </div>
 
                       {/* SKU and Barcode */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
                         <div>
-                          <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                          <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                             SKU
                           </Label>
                           <Input 
@@ -722,7 +765,7 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                           />
                         </div>
                         <div>
-                          <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                          <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                             Barcode
                           </Label>
                           <Input 
@@ -735,56 +778,69 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                       </div>
 
                       {/* Quantity, Unit Price, Total Price */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                         <div>
-                          <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                          <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                             Quantity *
                           </Label>
                           <Input 
-                            type="number"
-                            value={item.quantity}
+                            type="text"
+                            inputMode="numeric"
+                            value={item.quantity ?? ''}
                             onChange={(e) => {
-                              const qty = parseInt(e.target.value) || 0;
-                              updateItemValue(index, 'quantity', qty);
-                              if (item.unitPrice > 0) {
-                                updateItemValue(index, 'totalPrice', qty * item.unitPrice);
+                              const value = e.target.value;
+                              // Allow empty value for user to clear and re-enter
+                              if (value === '' || value === null) {
+                                updateItemValue(index, 'quantity', 0);
+                                return;
+                              }
+                              // Only allow numeric input
+                              if (!/^\d*\.?\d*$/.test(value)) return;
+                              const qty = parseFloat(value);
+                              if (!isNaN(qty) && qty >= 0) {
+                                updateItemValue(index, 'quantity', qty);
                               }
                             }}
-                            placeholder="0"
-                            min="1"
+                            placeholder="Enter quantity"
                             className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                           />
                         </div>
                         <div>
-                          <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                          <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                             Unit Price (QR) *
                           </Label>
                           <Input 
-                            type="number"
-                            step="0.01"
-                            value={item.unitPrice}
+                            type="text"
+                            inputMode="decimal"
+                            value={item.unitPrice ?? ''}
                             onChange={(e) => {
-                              const price = parseFloat(e.target.value) || 0;
-                              updateItemValue(index, 'unitPrice', price);
-                              updateItemValue(index, 'totalPrice', item.quantity * price);
+                              const value = e.target.value;
+                              // Allow empty value for user to clear and re-enter
+                              if (value === '' || value === null) {
+                                updateItemValue(index, 'unitPrice', 0);
+                                return;
+                              }
+                              // Only allow numeric input with decimal
+                              if (!/^\d*\.?\d*$/.test(value)) return;
+                              const price = parseFloat(value);
+                              if (!isNaN(price) && price >= 0) {
+                                updateItemValue(index, 'unitPrice', price);
+                              }
                             }}
-                            placeholder="0.00"
-                            min="0"
+                            placeholder="Enter price"
                             className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                           />
                         </div>
                         <div>
-                          <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                          <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                             Total Price (QR)
                           </Label>
                           <Input 
-                            type="number"
-                            step="0.01"
-                            value={item.totalPrice}
-                            onChange={(e) => updateItemValue(index, 'totalPrice', parseFloat(e.target.value) || 0)}
-                            placeholder="0.00"
+                            type="text"
+                            value={`QR ${(item.totalPrice || 0).toFixed(2)}`}
+                            placeholder="QR 0.00"
                             readOnly
-                            className="bg-slate-50 border-slate-300 font-semibold"
+                            className="bg-slate-50 border-slate-300 font-semibold cursor-not-allowed text-blue-600"
                           />
                         </div>
                       </div>
@@ -805,10 +861,10 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
               {/* Items Summary */}
               {editingItems.length > 0 && (
                 <Card className="bg-gradient-to-br from-blue-50 to-slate-50 border-blue-200 shadow-sm">
-                  <CardContent className="p-6">
+                  <CardContent className="p-3">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-semibold text-slate-700">Items Total:</span>
-                      <span className="text-2xl font-bold text-blue-600">
+                      <span className="text-xs font-semibold text-slate-700">Items Total:</span>
+                      <span className="text-xl font-bold text-blue-600">
                         QR {editingItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0).toFixed(2)}
                       </span>
                     </div>
@@ -825,16 +881,16 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
 
       case 5:
         return (
-          <div className="max-w-4xl mx-auto space-y-8">
+          <div className="max-w-4xl mx-auto space-y-1.5">
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-4">
-                <Coins className="w-6 h-6 text-green-600" />
+              <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 mb-1">
+                <Coins className="w-5 h-5 text-green-600" />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Payment Status</h3>
-              <p className="text-sm text-slate-600">Select the payment status for this {invoiceType}</p>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">Payment Status</h3>
+              <p className="text-xs text-slate-600">Select the payment status for this {invoiceType}</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {[
                 { 
                   value: 'paid', 
@@ -893,14 +949,14 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                     }`}
                     onClick={() => setPaymentStatus(status.value as PaymentStatus)}
                   >
-                    <CardContent className="p-6 text-center">
-                      <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full ${status.bgColor} mb-3`}>
-                        <Icon className={`w-6 h-6 ${status.textColor}`} />
+                    <CardContent className="p-2 text-center">
+                      <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full ${status.bgColor} mb-1`}>
+                        <Icon className={`w-5 h-5 ${status.textColor}`} />
                       </div>
-                      <h4 className="text-base font-bold text-slate-900 mb-1">{status.label}</h4>
-                      <p className="text-sm text-slate-600">{status.description}</p>
+                      <h4 className="text-sm font-bold text-slate-900 mb-0.5">{status.label}</h4>
+                      <p className="text-xs text-slate-600">{status.description}</p>
                       {isSelected && (
-                        <Badge className={`mt-3 ${status.bgColor} ${status.textColor} border-${status.color}-200`}>
+                        <Badge className={`mt-2 ${status.bgColor} ${status.textColor} border-${status.color}-200`}>
                           <Check className="w-3 h-3 mr-1" />
                           Selected
                         </Badge>
@@ -916,25 +972,25 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
       case 6:
         const itemsTotal = editingItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
         return (
-          <div className="max-w-5xl mx-auto space-y-8">
+          <div className="max-w-5xl mx-auto space-y-1.5">
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-teal-100 mb-4">
-                <Check className="w-6 h-6 text-teal-600" />
+              <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-teal-100 mb-1">
+                <Check className="w-5 h-5 text-teal-600" />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Review & Submit</h3>
-              <p className="text-sm text-slate-600">Please review all information before submitting</p>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">Review & Submit</h3>
+              <p className="text-xs text-slate-600">Please review all information before submitting</p>
             </div>
 
             {/* Header Summary */}
             <Card className="border-slate-200 shadow-sm">
-              <CardHeader className="bg-slate-50 border-b border-slate-200">
+              <CardHeader className="bg-slate-50 border-b border-slate-200 py-2">
                 <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-slate-600" />
+                  <FileText className="w-4 h-4 text-slate-600" />
                   Invoice Summary
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <CardContent className="p-3 space-y-1.5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
                     <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</span>
                     <p className="text-sm font-medium text-slate-900 mt-1">
@@ -964,24 +1020,24 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                 </div>
                 
                 {/* Financial Summary */}
-                <div className="border-t border-slate-200 pt-4">
-                  <h4 className="text-sm font-semibold text-slate-900 mb-3">Financial Summary</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-slate-50 p-4 rounded-lg">
+                <div className="border-t border-slate-200 pt-2">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-2">Financial Summary</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div className="bg-slate-50 p-2 rounded-lg">
                       <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Subtotal</span>
-                      <p className="text-lg font-bold text-slate-900 mt-1">QR {headerDetails.subtotal.toFixed(2)}</p>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">QR {headerDetails.subtotal.toFixed(2)}</p>
                     </div>
-                    <div className="bg-slate-50 p-4 rounded-lg">
+                    <div className="bg-slate-50 p-2 rounded-lg">
                       <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tax</span>
-                      <p className="text-lg font-bold text-slate-900 mt-1">QR {headerDetails.tax.toFixed(2)}</p>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">QR {headerDetails.tax.toFixed(2)}</p>
                     </div>
-                    <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
+                    <div className="bg-blue-50 p-2 rounded-lg border-2 border-blue-200">
                       <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Total</span>
-                      <p className="text-lg font-bold text-blue-600 mt-1">QR {headerDetails.total.toFixed(2)}</p>
+                      <p className="text-sm font-bold text-blue-600 mt-0.5">QR {headerDetails.total.toFixed(2)}</p>
                     </div>
                   </div>
                   {Math.abs(itemsTotal - headerDetails.total) > 0.01 && (
-                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                    <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
                       <div className="text-xs text-amber-800">
                         <strong>Note:</strong> Items total (QR {itemsTotal.toFixed(2)}) differs from header total (QR {headerDetails.total.toFixed(2)})
@@ -994,16 +1050,16 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
 
             {/* Items Summary */}
             <Card className="border-slate-200 shadow-sm">
-              <CardHeader className="bg-slate-50 border-b border-slate-200">
+              <CardHeader className="bg-slate-50 border-b border-slate-200 py-2">
                 <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <ShoppingCart className="w-5 h-5 text-slate-600" />
+                  <ShoppingCart className="w-4 h-4 text-slate-600" />
                   Items ({editingItems.length})
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-3">
+              <CardContent className="p-3">
+                <div className="space-y-1.5">
                   {editingItems.map((item, index) => (
-                    <div key={index} className="flex justify-between items-start p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div key={index} className="flex justify-between items-start p-2 bg-slate-50 rounded-lg border border-slate-200">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
@@ -1021,13 +1077,13 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                       </div>
                       <div className="text-right ml-4">
                         <div className="text-sm text-slate-600">{item.quantity} × QR {item.unitPrice.toFixed(2)}</div>
-                        <div className="text-base font-bold text-slate-900">QR {item.totalPrice.toFixed(2)}</div>
+                        <div className="text-sm font-bold text-slate-900">QR {item.totalPrice.toFixed(2)}</div>
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-slate-200 mt-4 pt-4 flex justify-between items-center">
-                  <span className="text-base font-bold text-slate-900">Items Total:</span>
+                <div className="border-t border-slate-200 mt-2 pt-2 flex justify-between items-center">
+                  <span className="text-sm font-bold text-slate-900">Items Total:</span>
                   <span className="text-xl font-bold text-blue-600">QR {itemsTotal.toFixed(2)}</span>
                 </div>
               </CardContent>
@@ -1036,17 +1092,17 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
             {/* Image Preview (if scanned) */}
             {imagePreview && (
               <Card className="border-slate-200 shadow-sm">
-                <CardHeader className="bg-slate-50 border-b border-slate-200">
+                <CardHeader className="bg-slate-50 border-b border-slate-200 py-2">
                   <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <Camera className="w-5 h-5 text-slate-600" />
+                    <Camera className="w-4 h-4 text-slate-600" />
                     Scanned Invoice
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-6">
+                <CardContent className="p-2">
                   <img 
                     src={imagePreview} 
                     alt="Scanned invoice" 
-                    className="w-full max-h-64 object-contain rounded-lg border-2 border-slate-200"
+                    className="w-full max-h-48 object-contain rounded-lg border-2 border-slate-200"
                   />
                 </CardContent>
               </Card>
@@ -1062,9 +1118,9 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="w-[95vw] max-w-4xl h-[95vh] max-h-[95vh] overflow-y-auto p-0">
-        <DialogHeader className="pb-0 border-b bg-white px-4 sm:px-6 pt-4 pb-4 sticky top-0 z-10">
+        <DialogHeader className="pb-0 border-b bg-white px-3 sm:px-4 pt-2 pb-2 sticky top-0 z-10">
           {/* Header with Back Button and Steps */}
-          <div className="flex items-center justify-between gap-4 mb-3">
+          <div className="flex items-center justify-between gap-3 mb-1.5">
             <Button 
               variant="ghost" 
               size="sm"
@@ -1075,18 +1131,18 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
               {currentStep === 1 ? 'Back to Invoices' : 'Back'}
             </Button>
             
-            <div className="flex items-center gap-3">
-              <div className="text-sm font-medium text-slate-600">
+            <div className="flex items-center gap-2">
+              <div className="text-xs font-medium text-slate-600">
                 Step {currentStep} of {wizardSteps.length}
               </div>
             </div>
           </div>
           
           <div>
-            <DialogTitle className="text-xl sm:text-2xl font-bold text-slate-900">
+            <DialogTitle className="text-lg sm:text-xl font-bold text-slate-900">
               {wizardSteps[currentStep - 1]?.title}
             </DialogTitle>
-            <DialogDescription className="text-sm text-slate-600 mt-1">
+            <DialogDescription className="text-xs text-slate-600 mt-0.5">
               {currentStep === 1 && "Select the type of invoice you want to create"}
               {currentStep === 2 && "Scan or upload your invoice for automatic data extraction"}
               {currentStep === 3 && "Review and edit the invoice header information"}
@@ -1097,7 +1153,7 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
           </div>
 
           {/* Progress Steps - Desktop */}
-          <div className="hidden sm:flex items-center justify-between mt-4 pt-4 border-t">
+          <div className="hidden sm:flex items-center justify-between mt-2 pt-2 border-t">
             {wizardSteps.map((step, index) => (
               <div key={step.number} className="flex items-center flex-1">
                 <div className="flex items-center">
@@ -1125,12 +1181,12 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
         </DialogHeader>
 
         {/* Step Content */}
-        <div className="min-h-[300px] sm:min-h-[400px] flex-1 overflow-y-auto px-4 sm:px-6 py-6 bg-slate-50">
+        <div className="min-h-[300px] sm:min-h-[400px] flex-1 overflow-y-auto px-3 sm:px-4 py-3 bg-slate-50">
           {renderStepContent()}
         </div>
 
         {/* Navigation Buttons */}
-        <div className="flex justify-between items-center px-4 sm:px-6 py-4 border-t bg-white sticky bottom-0 shadow-lg">
+        <div className="flex justify-between items-center px-3 sm:px-4 py-2 border-t bg-white sticky bottom-0 shadow-lg">
           <Button 
             variant="outline" 
             onClick={handleBack} 
@@ -1141,7 +1197,7 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
             <span>Back</span>
           </Button>
           
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <Button 
               variant="outline" 
               onClick={handleClose}
@@ -1170,7 +1226,8 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
             ) : (
               <Button 
                 onClick={handleNext} 
-                className="flex items-center bg-blue-600 hover:bg-blue-700"
+                disabled={currentStep === 2 && !extractedData}
+                className="flex items-center bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>Next</span>
                 <ArrowRight className="w-4 h-4 ml-2" />

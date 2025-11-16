@@ -27,7 +27,8 @@ import {
   Download,
   Eye,
   Upload,
-  AlertTriangle
+  AlertTriangle,
+  Trash2
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -68,13 +69,18 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
 
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<SupplierInvoice>) => {
-      return apiRequest({
+      const response = await apiRequest({
         url: `/api/supplier-invoices/${invoice.id}`,
         method: 'PATCH',
         body: data,
       });
+      return await response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Update the local state with the returned data
+      if (data) {
+        setEditedInvoice(data);
+      }
       toast({
         title: "Success",
         description: "Invoice updated successfully",
@@ -82,28 +88,117 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
       queryClient.invalidateQueries({ queryKey: ['/api/supplier-invoices'] });
       setIsEditing(false);
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      console.error("Invoice update error:", error);
+      console.error("Error details:", {
+        message: error?.message,
+        response: error?.response,
+        stack: error?.stack
+      });
+      
+      // Extract error message from response
+      let errorMessage = "Failed to update invoice. Please try again.";
+      if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error?.response?.data?.details) {
+        errorMessage = error.response.data.details;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to update invoice. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
-      console.error("Invoice update error:", error);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      console.log("Deleting invoice with ID:", invoice.id);
+      try {
+        const response = await apiRequest({
+          url: `/api/supplier-invoices/${invoice.id}`,
+          method: 'DELETE',
+        });
+        console.log("Delete response status:", response.status);
+        const data = await response.json();
+        console.log("Delete response data:", data);
+        return data;
+      } catch (error) {
+        console.error("Delete API request error:", error);
+        throw error;
+      }
+    },
+    onSuccess: (data) => {
+      console.log("Delete mutation success:", data);
+      toast({
+        title: "Success",
+        description: "Invoice deleted successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/supplier-invoices'] });
+      onClose();
+    },
+    onError: (error: any) => {
+      console.error("Delete mutation error:", error);
+      console.error("Error details:", {
+        message: error?.message,
+        response: error?.response,
+        stack: error?.stack
+      });
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to delete invoice. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
   const handleSave = () => {
-    updateMutation.mutate({
-      ...editedInvoice,
-      invoiceDate: new Date(editedInvoice.invoiceDate),
-      dueDate: editedInvoice.dueDate ? new Date(editedInvoice.dueDate) : null,
-      processedAt: editedInvoice.processedAt ? new Date(editedInvoice.processedAt) : null,
-    });
+    try {
+      // Only send fields that can be updated, excluding id, supplierId, createdAt
+      const updatePayload: any = {
+        invoiceNumber: editedInvoice.invoiceNumber,
+        invoiceDate: new Date(editedInvoice.invoiceDate).toISOString(),
+        dueDate: editedInvoice.dueDate ? new Date(editedInvoice.dueDate).toISOString() : null,
+        subtotal: String(editedInvoice.subtotal),
+        tax: String(editedInvoice.tax || '0'),
+        total: String(editedInvoice.total),
+        status: editedInvoice.status,
+        paymentStatus: editedInvoice.paymentStatus || 'not_paid',
+        type: editedInvoice.type,
+        crNo: editedInvoice.crNo || null,
+        customerName: editedInvoice.customerName || null,
+        customerPhone: editedInvoice.customerPhone || null,
+        customerMobile: editedInvoice.customerMobile || null,
+        customerEmail: editedInvoice.customerEmail || null,
+        customerAddress: editedInvoice.customerAddress || null,
+        salesmanName: editedInvoice.salesmanName || null,
+        notes: editedInvoice.notes || null,
+      };
+      
+      console.log("Sending update payload:", updatePayload);
+      updateMutation.mutate(updatePayload);
+    } catch (error) {
+      console.error("Error preparing update payload:", error);
+      toast({
+        title: "Error",
+        description: "Failed to prepare invoice data. Please check the form fields.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCancel = () => {
     setEditedInvoice(invoice);
     setIsEditing(false);
+  };
+
+  const handleDelete = () => {
+    if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}? This action cannot be undone.`)) {
+      deleteMutation.mutate();
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -149,6 +244,15 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
                   >
                     <CreditCard className="w-4 h-4 mr-2" />
                     {isFullyPaid ? "Paid" : "Pay"}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleDelete}
+                    disabled={deleteMutation.isPending}
+                    className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    {deleteMutation.isPending ? "Removing..." : "Remove"}
                   </Button>
                   <Button 
                     variant="outline" 

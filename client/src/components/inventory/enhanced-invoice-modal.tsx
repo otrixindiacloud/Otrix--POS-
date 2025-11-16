@@ -291,7 +291,7 @@ export default function EnhancedInvoiceModal({ isOpen, onClose, type, invoice }:
 
   const calculateTotals = (items: InvoiceItem[]) => {
     const subtotal = items.reduce((sum, item) => sum + item.totalCost, 0);
-    const tax = subtotal * 0.15; // 15% VAT
+    const tax = subtotal * 0; // 0% VAT
     const total = subtotal + tax;
     
     setFormData(prev => ({

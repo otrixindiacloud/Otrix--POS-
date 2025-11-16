@@ -197,7 +197,7 @@ export default function PrinterConfigModal({ isOpen, onClose }: PrinterConfigMod
         Test Item 2              QR 3.50
         --------------------------------
         Subtotal:                QR 8.50
-        Tax:                     QR 0.68
+        VAT:                     QR 0.68
         --------------------------------
         TOTAL:                   QR 9.18
         --------------------------------

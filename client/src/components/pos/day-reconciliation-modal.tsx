@@ -203,8 +203,10 @@ export default function DayReconciliationModal({ isOpen, onClose, dayOperation }
         closedAt: new Date().toISOString()
       };
 
+      console.log('📥 Closing day operation:', dayOpForDate.id, 'for date:', dayOpForDate.date);
+
       return apiRequest({
-        url: `/api/day-operations/${dayOpForDate.id}`,
+        url: `/api/day-operations/${dayOpForDate.id}/close`,
         method: "PATCH",
         body: closingData
       });

@@ -51,8 +51,8 @@ export async function generateInvoiceForTransaction(
         customerId: transaction.customerId,
         cashierId: transaction.cashierId,
         subtotal: transaction.subtotal,
-        tax: transaction.tax,
-        discount: DEFAULT_DISCOUNT,
+        tax: transaction.tax || transaction.vatAmount, // Use tax or vatAmount
+        discount: transaction.discountAmount || DEFAULT_DISCOUNT, // Use actual discount
         total: transaction.total,
         paymentMethod: transaction.paymentMethod || "cash",
         cashTendered: transaction.cashTendered,

@@ -31,7 +31,7 @@ export default function QuickCheckout() {
     currentTransactionNumber,
     resumedHeldTransactionId,
     getCartSubtotal,
-    getCartTax,
+    getCartVAT,
     getCartTotal,
     clearCart,
     setResumedHeldTransactionId
@@ -73,7 +73,7 @@ export default function QuickCheckout() {
         customerId: currentCustomer?.id || null,
         cashierId: 1, // Default cashier
         subtotal: getCartSubtotal().toFixed(2),
-        tax: getCartTax().toFixed(2),
+        tax: getCartVAT().toFixed(2),
         total: total.toFixed(2),
         status: "completed",
         paymentMethod: paymentData.method,

@@ -126,7 +126,14 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
       messages: [
         {
           role: "system",
-          content: `You are an expert at extracting data from ${documentType} images. Extract all relevant information and return it in the exact JSON format specified. Focus on accuracy and completeness.`
+          content: `You are an expert OCR specialist at extracting data from ${documentType} images, including receipts with handwritten notes and small text. Extract all relevant information and return it in the exact JSON format specified. 
+          
+          CRITICAL RULES:
+          1. Only extract rows that have ACTUAL HANDWRITTEN OR FILLED DATA - ignore blank template rows
+          2. Read ACTUAL numbers written/circled on the form - do NOT use template/example values
+          3. Handwritten numbers may be circled or highlighted - these are the real transaction values
+          4. Empty template rows with pre-printed labels should be completely ignored
+          5. Focus on what is ACTUALLY FILLED IN, not what is pre-printed on the template`
         },
         {
           role: "user",
@@ -156,46 +163,212 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
                 "confidence": number (0.0 to 1.0)
               }
               
-              Parse all line items carefully. If dates are unclear, estimate based on invoice format. If amounts are unclear, calculate based on line items.`
+              CRITICAL INSTRUCTIONS FOR EXTRACTING ITEMS:
+              
+              UNDERSTAND THE TABLE LAYOUT:
+              The invoice table has these columns from LEFT to RIGHT:
+              1. رقم الصنف (Item No.) - Row number
+              2. التفصيل / Description - Product name/description
+              3. الكمية / Qty - Quantity (number of units)
+              4. سعر الوحدة / U. Price - Unit price per item, split into:
+                 - ريال / QR (Qatari Riyals)
+                 - درهم / Dh (Dirhams - decimals)
+              5. المبلغ / Amount - Total price (Quantity × Unit Price), split into:
+                 - ريال / QR (Qatari Riyals)
+                 - درهم / Dh (Dirhams - decimals)
+              
+              EXTRACTION RULES - READ VERY CAREFULLY:
+              - ONLY extract items that have ACTUAL HANDWRITTEN OR FILLED DATA
+              - IGNORE completely empty rows even if they have printed row numbers
+              - Look for handwritten numbers, circled numbers, or filled data
+              - Many invoices have pre-printed template rows that were NOT used - skip these entirely
+              - A row is ONLY valid if it has handwritten data in Qty, Unit Price, or Amount columns
+              
+              STEP-BY-STEP EXTRACTION FOR EACH ROW:
+              
+              Step 1: Identify if the row has ANY handwritten data
+              - Look for ink marks, handwriting, or circled numbers
+              - If the row is completely blank except for pre-printed labels, SKIP IT
+              
+              Step 2: Extract PRODUCT NAME from the "التفصيل / Description" column
+              - This is typically the second column from the left
+              - May be handwritten or pre-printed product name
+              - Common examples: "MTA", "CABLE", "PIPE", etc.
+              
+              Step 3: Extract QUANTITY from the "الكمية / Qty" column
+              - This is usually the third column
+              - Look for handwritten number in the quantity box
+              - Common values: 1, 2, 4, 8, 10, 12, 16, 20, etc.
+              - Be careful with handwritten numbers that might look unclear
+              
+              Step 4: Extract TOTAL AMOUNT FIRST (most reliable)
+              - Find the "المبلغ / Amount" column (rightmost columns with QR and Dh)
+              - Look for the TOTAL PRICE which is often circled or emphasized
+              - This is the FINAL price for this line item (Quantity × Unit Price)
+              - Read the QR (ريال) column for the main amount
+              - Read the Dh (درهم) column for decimals if present
+              - Combine them: if QR=12 and Dh is empty, total = 12.00
+              
+              Step 5: Calculate or Extract UNIT PRICE
+              - Look in the "سعر الوحدة / U. Price" columns (middle columns)
+              - Read what's written in the QR and Dh sub-columns
+              - If unit price is blank/unclear, CALCULATE IT: Unit Price = Total Amount ÷ Quantity
+              - Example: If Total=12 and Qty=16, then Unit Price = 12÷16 = 0.75
+              - Verify your calculation makes sense (Unit Price × Quantity should equal Total)
+              
+              CRITICAL MATH VALIDATION:
+              - After extraction, verify: Quantity × Unit Price ≈ Total Price
+              - If the math doesn't match, recalculate the unit price: Unit Price = Total ÷ Quantity
+              - ALWAYS prioritize the TOTAL AMOUNT as it's usually most clearly written
+              - Example from image:
+                * Product: MTA
+                * Quantity: 16 (handwritten in Qty column)
+                * Total: 12 (circled in Amount column)
+                * Therefore Unit Price must be: 12 ÷ 16 = 0.75 QR
+              
+              IMPORTANT - HANDLING UNCLEAR HANDWRITING:
+              - The Total Amount is usually the MOST CLEARLY written (often circled)
+              - If Unit Price is unclear or missing, calculate it from Total ÷ Quantity
+              - Quantity is typically easier to read than unit prices
+              - Don't assume values - extract what you see or calculate based on math
+              - Handwritten 1 looks like: |
+              - Handwritten 2 looks like: curved line
+              - Handwritten 4 looks like: angular or checkmark shape
+              - Handwritten 7 may have a line through it: 7̶
+              - Decimals are often in the Dh (درهم) column
+              
+              OTHER INSTRUCTIONS:
+              - Look at the BOTTOM of the invoice for the final totals section
+              - The "Total" row at the bottom (often has handwritten/circled amount) is the GRAND TOTAL
+              - "Discount" row may have a discount amount
+              - "Grant Total" (or "Grand Total") is the final amount after discount
+              - The REMARKS section may contain additional notes or reference numbers (ignore these for calculations)
+              - Parse dates carefully - formats like "15/11/25" or "1.5.11.25" mean day-month-year
+              - Convert dates to YYYY-MM-DD format (e.g., "15/11/25" → "2025-11-15")
+              - If you see "1.5.11.25" that likely means day 15, month 11, year 2025
+              - Prefer QR (Qatari Riyal) as the currency
+              - If subtotal is not shown, sum all line item totals
+              - VAT is often zero on these invoices unless explicitly shown
+              - ONLY include line items with actual data - skip empty template rows
+              - Double-check: For EACH item, verify that Quantity × Unit Price = Total Price
+              - If the math doesn't match, recalculate unit price as: Total Price ÷ Quantity`
             },
             {
               type: "image_url",
               image_url: {
                 url: `data:image/jpeg;base64,${base64Image}`,
-                detail: "low"
+                detail: "high"
               }
             }
           ]
         }
       ],
       response_format: { type: "json_object" },
-      max_tokens: 2000,
+      max_tokens: 4000,
       temperature: 0.1
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
     
+    console.log("✅ AI Extraction Results (raw):", {
+      invoiceNumber: result.invoiceNumber,
+      supplierName: result.supplierName,
+      itemsCount: result.items?.length || 0,
+      items: result.items?.map((item: any) => ({
+        name: item.productName,
+        qty: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.totalPrice
+      })),
+      total: result.total,
+      confidence: result.confidence
+    });
+    
+    // Validate and correct items with math validation
+    const validatedItems = (result.items || []).map((item: any) => {
+      const quantity = Number(item.quantity) || 1;
+      const totalPrice = Number(item.totalPrice) || 0;
+      let unitPrice = Number(item.unitPrice) || 0;
+      
+      // CRITICAL: Validate math - if unit price × quantity doesn't match total, recalculate
+      const calculatedTotal = unitPrice * quantity;
+      const difference = Math.abs(calculatedTotal - totalPrice);
+      const tolerance = 0.02; // 2 cent tolerance for rounding
+      
+      if (difference > tolerance && totalPrice > 0 && quantity > 0) {
+        // Math doesn't match - recalculate unit price from total
+        const correctedUnitPrice = totalPrice / quantity;
+        console.warn(`⚠️ Math correction for "${item.productName}":`, {
+          original: { qty: quantity, unitPrice, total: totalPrice, calculated: calculatedTotal },
+          corrected: { qty: quantity, unitPrice: correctedUnitPrice, total: totalPrice }
+        });
+        unitPrice = parseFloat(correctedUnitPrice.toFixed(2));
+      } else if (unitPrice === 0 && totalPrice > 0 && quantity > 0) {
+        // Unit price is zero but we have total and quantity - calculate it
+        unitPrice = parseFloat((totalPrice / quantity).toFixed(2));
+        console.log(`✅ Calculated unit price for "${item.productName}": ${unitPrice} (from ${totalPrice} ÷ ${quantity})`);
+      }
+      
+      return {
+        productName: item.productName || "Unknown Product",
+        quantity: quantity,
+        unitPrice: unitPrice,
+        totalPrice: totalPrice,
+        sku: item.sku || null,
+        barcode: item.barcode || null
+      };
+    });
+    
+    // Parse and validate invoice date with better format handling
+    let invoiceDate = result.invoiceDate;
+    if (invoiceDate && typeof invoiceDate === 'string') {
+      // Handle formats like "1.5.11.25" or "15/11/25" or "1.5/11/25"
+      const dateStr = invoiceDate.replace(/[.\s]/g, '/'); // Normalize separators
+      const parts = dateStr.split('/');
+      
+      if (parts.length >= 3) {
+        let day = parseInt(parts[0]);
+        let month = parseInt(parts[1]);
+        let year = parseInt(parts[2]);
+        
+        // Handle 2-digit years
+        if (year < 100) {
+          year += 2000;
+        }
+        
+        // Validate and create date
+        if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 2000) {
+          invoiceDate = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        }
+      }
+    }
+    
+    if (!invoiceDate || typeof invoiceDate !== 'string' || !invoiceDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      invoiceDate = new Date().toISOString().split('T')[0];
+    }
+    
+    console.log("✅ Validated Items:", validatedItems.map((item: any) => ({
+      name: item.productName,
+      qty: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.totalPrice,
+      check: `${item.quantity} × ${item.unitPrice} = ${item.totalPrice}`
+    })));
+    
     // Validate and structure the response
     return {
       invoiceNumber: result.invoiceNumber || `INV-${Date.now()}`,
       supplierName: result.supplierName || "Unknown Supplier",
-      invoiceDate: result.invoiceDate || new Date().toISOString().split('T')[0],
+      invoiceDate: invoiceDate,
       dueDate: result.dueDate || null,
       subtotal: Number(result.subtotal) || 0,
       tax: Number(result.tax) || 0,
       total: Number(result.total) || 0,
-      items: (result.items || []).map((item: any) => ({
-        productName: item.productName || "Unknown Product",
-        quantity: Number(item.quantity) || 1,
-        unitPrice: Number(item.unitPrice) || 0,
-        totalPrice: Number(item.totalPrice) || 0,
-        sku: item.sku || null,
-        barcode: item.barcode || null
-      })),
+      items: validatedItems,
       confidence: Math.min(Math.max(Number(result.confidence) || 0.8, 0), 1)
     };
   } catch (error) {
-    console.error("Error extracting invoice data:", error);
+    console.error("❌ Error extracting invoice data:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     
     // Provide specific error messages

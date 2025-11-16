@@ -62,23 +62,37 @@ export function registerAiRoutes(app: Express) {
         return res.status(400).json({ message: "Query is required" });
       }
 
+      console.log(`📊 Generating AI report for query: "${query}"`);
+
       const { generateDynamicReport } = await import("../../ai-reports-service");
       const report = await generateDynamicReport(query);
+      
+      console.log(`✅ AI report generated successfully: ${report.data.length} rows`);
       res.json(report);
     } catch (error) {
-      console.error("Error generating AI report:", error);
+      console.error("❌ Error generating AI report:", error);
       
       // Check if this is an API key configuration error
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isApiKeyError = errorMessage.includes('OpenAI API key') || 
-                           errorMessage.includes('API key is required');
+                           errorMessage.includes('API key is required') ||
+                           errorMessage.includes('Invalid API key') ||
+                           errorMessage.includes('Unauthorized');
       
-      // Return 400 for configuration errors, 500 for actual server errors
-      const statusCode = isApiKeyError ? 400 : 500;
+      // Check if it's a rate limit or quota error
+      const isRateLimitError = errorMessage.includes('rate limit') || 
+                              errorMessage.includes('429') ||
+                              errorMessage.includes('quota') ||
+                              errorMessage.includes('billing');
+      
+      // Return 400 for configuration errors, 429 for rate limits, 500 for actual server errors
+      const statusCode = isApiKeyError ? 400 : isRateLimitError ? 429 : 500;
       
       res.status(statusCode).json({
         message: isApiKeyError 
-          ? "OpenAI API key is required. Please set a valid OpenAI API key in your .env file. Get one at https://platform.openai.com/api-keys (it should start with 'sk-')"
+          ? "OpenAI API key configuration error. Please check your environment variables."
+          : isRateLimitError
+          ? "OpenAI API rate limit exceeded. Please try again later."
           : "Failed to generate report",
         error: errorMessage,
       });

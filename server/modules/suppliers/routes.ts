@@ -1,14 +1,20 @@
 import type { Express } from "express";
 import * as XLSX from "xlsx";
 import fs from "fs";
+import { eq } from "drizzle-orm";
 import {
   insertSupplierSchema,
   insertSupplierInvoiceSchema,
   insertSupplierInvoiceItemSchema,
   insertStockAdjustmentSchema,
-  USER_ROLES
+  USER_ROLES,
+  suppliers,
+  supplierInvoices,
+  supplierInvoiceItems,
+  supplierPayments
 } from "@shared/schema";
 import { storage } from "../../storage";
+import { db } from "../../db";
 import { isAuthenticated } from "../../auth";
 import { requireRole } from "../shared/authorization";
 import { upload } from "../shared/upload";
@@ -67,28 +73,6 @@ export function registerSupplierRoutes(app: Express) {
       res.status(400).json({ message: "Invalid supplier data", error });
     }
   });
-
-  app.delete(
-    "/api/suppliers/:id",
-    isAuthenticated,
-    requireRole([USER_ROLES.ADMIN, USER_ROLES.MANAGER]),
-    async (req, res) => {
-      const id = parseInt(req.params.id);
-      if (isNaN(id) || id <= 0) {
-        return res.status(400).json({ message: "Invalid supplier ID" });
-      }
-      try {
-        const success = await storage.deleteSupplier(id);
-        if (!success) {
-          return res.status(404).json({ message: "Supplier not found" });
-        }
-        res.json({ message: "Supplier deleted successfully" });
-      } catch (error) {
-        console.error("Error deleting supplier:", error);
-        res.status(500).json({ message: "Failed to delete supplier", error });
-      }
-    }
-  );
 
   app.post("/api/suppliers/parse-upload", upload.single("file"), async (req, res) => {
     try {
@@ -488,16 +472,66 @@ export function registerSupplierRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid invoice ID" });
       }
 
+      console.log("=== UPDATING INVOICE ===");
+      console.log("Invoice ID:", id);
+      console.log("Request body:", JSON.stringify(req.body, null, 2));
+
+      // Parse and validate the update data
       const updateData = insertSupplierInvoiceSchema.partial().parse(req.body);
+      
+      // Convert date strings to Date objects for Drizzle ORM
+      if (updateData.invoiceDate && typeof updateData.invoiceDate === 'string') {
+        updateData.invoiceDate = new Date(updateData.invoiceDate);
+      }
+      if (updateData.dueDate && typeof updateData.dueDate === 'string') {
+        updateData.dueDate = new Date(updateData.dueDate);
+      }
+      if (updateData.processedAt && typeof updateData.processedAt === 'string') {
+        updateData.processedAt = new Date(updateData.processedAt);
+      }
+      
+      console.log("Parsed update data:", JSON.stringify(updateData, null, 2));
+
       const invoice = await storage.updateSupplierInvoice(id, updateData);
 
       if (!invoice) {
+        console.error("Invoice not found:", id);
         return res.status(404).json({ message: "Invoice not found" });
       }
 
+      console.log("Invoice updated successfully:", invoice.id);
       res.json(invoice);
-    } catch (error) {
-      res.status(400).json({ message: "Failed to update invoice", error });
+    } catch (error: any) {
+      console.error("=== ERROR UPDATING INVOICE ===");
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+      console.error("Full error object:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      
+      // Return detailed error message for validation errors
+      if (error.name === 'ZodError') {
+        console.error("Zod validation errors:", JSON.stringify(error.errors, null, 2));
+        return res.status(400).json({ 
+          message: "Invalid data format", 
+          errors: error.errors,
+          details: error.message 
+        });
+      }
+      
+      // Check for database constraint errors
+      if (error.code === '23505' || error.message?.includes('unique constraint')) {
+        return res.status(400).json({ 
+          message: "Invoice number already exists", 
+          error: "An invoice with this number already exists in the system"
+        });
+      }
+      
+      res.status(400).json({ 
+        message: "Failed to update invoice", 
+        error: error.message || String(error),
+        code: error.code,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   });
 
@@ -512,6 +546,82 @@ export function registerSupplierRoutes(app: Express) {
       res.json(items);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch invoice items", error });
+    }
+  });
+
+  // Delete supplier invoice
+  app.delete("/api/supplier-invoices/:id", async (req, res) => {
+    try {
+      console.log("DELETE request received for invoice ID:", req.params.id);
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        console.error("Invalid invoice ID:", req.params.id);
+        return res.status(400).json({ message: "Invalid invoice ID" });
+      }
+      
+      console.log("Checking if invoice exists:", id);
+      // First, check if invoice exists
+      const invoice = await db.select().from(supplierInvoices).where(eq(supplierInvoices.id, id)).limit(1);
+      if (!invoice || invoice.length === 0) {
+        console.error("Invoice not found:", id);
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      console.log("Invoice found, deleting payments...");
+      // Delete payments first (foreign key constraint)
+      await db.delete(supplierPayments).where(eq(supplierPayments.invoiceId, id));
+      
+      console.log("Payments deleted, deleting items...");
+      // Delete invoice items
+      await db.delete(supplierInvoiceItems).where(eq(supplierInvoiceItems.invoiceId, id));
+      
+      console.log("Items deleted, deleting invoice...");
+      // Delete the invoice
+      await db.delete(supplierInvoices).where(eq(supplierInvoices.id, id));
+      
+      console.log("Invoice deleted successfully:", id);
+      res.json({ success: true, message: "Invoice deleted successfully" });
+    } catch (error) {
+      console.error("Delete invoice error:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to delete invoice", 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  });
+
+  // Delete supplier
+  app.delete("/api/suppliers/:id", async (req, res) => {
+    try {
+      console.log("DELETE request received for supplier ID:", req.params.id);
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        console.error("Invalid supplier ID:", req.params.id);
+        return res.status(400).json({ message: "Invalid supplier ID" });
+      }
+      
+      console.log("Checking if supplier exists:", id);
+      // First, check if supplier exists
+      const supplier = await db.select().from(suppliers).where(eq(suppliers.id, id)).limit(1);
+      if (!supplier || supplier.length === 0) {
+        console.error("Supplier not found:", id);
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      
+      console.log("Supplier found, deleting...");
+      // Delete the supplier
+      await db.delete(suppliers).where(eq(suppliers.id, id));
+      
+      console.log("Supplier deleted successfully:", id);
+      res.json({ success: true, message: "Supplier deleted successfully" });
+    } catch (error) {
+      console.error("Delete supplier error:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to delete supplier", 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
   });
 }

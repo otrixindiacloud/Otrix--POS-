@@ -435,22 +435,40 @@ export function registerTillRoutes(app: Express) {
     }
 
     try {
-      console.log("Day Close Request Body Keys:", Object.keys(req.body));
-      console.log("Day Close Data Sample:", {
+      console.log("📥 Day Close Request - ID:", id);
+      console.log("📥 Day Close Request Body Keys:", Object.keys(req.body));
+      console.log("📥 Day Close Data Sample:", {
         expectedCash: req.body.expectedCash,
         actualCashCount: req.body.actualCashCount,
         cashDifference: req.body.cashDifference,
         closingCash: req.body.closingCash
       });
 
+      // Verify day operation exists and is open
+      const existingDayOp = await storage.getDayOperationById(id);
+      if (!existingDayOp) {
+        return res.status(404).json({ message: "Day operation not found" });
+      }
+
+      if (existingDayOp.status === "closed") {
+        return res.status(400).json({ message: "Day operation is already closed" });
+      }
+
       const closeData = insertDayOperationSchema.partial().parse(req.body);
+      
+      // Remove timestamp fields from request - we'll set them on the server
+      delete (closeData as any).closedAt;
+      delete (closeData as any).openedAt;
+      delete (closeData as any).reopenedAt;
+      
       const updatedCloseData = {
         ...closeData,
         status: "closed" as const,
-        closedAt: new Date().toISOString()
+        closedAt: new Date(), // Use Date object instead of ISO string
+        closedBy: req.user?.id
       };
 
-      console.log("Parsed Close Data Sample:", {
+      console.log("✅ Parsed Close Data Sample:", {
         expectedCash: closeData.expectedCash,
         actualCashCount: closeData.actualCashCount,
         cashDifference: closeData.cashDifference,
@@ -459,13 +477,17 @@ export function registerTillRoutes(app: Express) {
 
       const dayOperation = await storage.updateDayOperation(id, updatedCloseData);
       if (!dayOperation) {
-        return res.status(404).json({ message: "Day operation not found" });
+        return res.status(500).json({ message: "Failed to update day operation" });
       }
 
+      console.log("✅ Day closed successfully:", dayOperation.id, dayOperation.date, dayOperation.status);
       res.json(dayOperation);
     } catch (error) {
-      console.error("Day Close Error:", error);
-      res.status(400).json({ message: "Invalid close data", error });
+      console.error("❌ Day Close Error:", error);
+      res.status(400).json({ 
+        message: "Invalid close data", 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
   });
 
@@ -480,18 +502,24 @@ export function registerTillRoutes(app: Express) {
       }
 
       try {
+        console.log("📥 Day Reopen Request - ID:", id, "User:", req.user?.username);
+        
         const dayOperation = await storage.getDayOperationById(id);
         if (!dayOperation) {
           return res.status(404).json({ message: "Day operation not found" });
         }
 
         if (dayOperation.status !== "closed") {
-          return res.status(400).json({ message: "Day operation is not closed, cannot reopen" });
+          return res.status(400).json({ 
+            message: "Day operation is not closed, cannot reopen",
+            currentStatus: dayOperation.status
+          });
         }
 
         // Check for currently open day in the same store
         const currentlyOpenDay = await storage.getOpenDayOperation(dayOperation.storeId);
         if (currentlyOpenDay && currentlyOpenDay.id !== dayOperation.id) {
+          console.log("⚠️  Cannot reopen: Another day is already open", currentlyOpenDay.date);
           return res.status(409).json({
             message: `Cannot reopen day. Day ${currentlyOpenDay.date} is currently open. Please close it first.`,
             conflictingDay: currentlyOpenDay.date
@@ -501,7 +529,7 @@ export function registerTillRoutes(app: Express) {
         const reopenData = {
           status: "open" as const,
           closedAt: null,
-          reopenedAt: new Date().toISOString(),
+          reopenedAt: new Date(), // Use Date object instead of ISO string
           reopenedBy: req.user?.id
         };
 
@@ -509,10 +537,15 @@ export function registerTillRoutes(app: Express) {
         if (!updatedDayOperation) {
           return res.status(500).json({ message: "Failed to update day operation" });
         }
+        
+        console.log("✅ Day reopened successfully:", updatedDayOperation.id, updatedDayOperation.date, updatedDayOperation.status);
         res.json(updatedDayOperation);
       } catch (error) {
-        console.error("Day reopen error:", error);
-        res.status(400).json({ message: "Failed to reopen day", error: error instanceof Error ? error.message : String(error) });
+        console.error("❌ Day reopen error:", error);
+        res.status(400).json({ 
+          message: "Failed to reopen day", 
+          error: error instanceof Error ? error.message : String(error) 
+        });
       }
     }
   );

@@ -350,18 +350,22 @@ export class PDFService {
             <span>Subtotal:</span>
             <span class="qr">QR ${Number(invoice.subtotal).toFixed(2)}</span>
           </div>
-          ${Number(invoice.discount) > 0 ? `
           <div class="total-row">
+            <span>VAT (5%):</span>
+            <span class="qr">QR ${Number(invoice.tax).toFixed(2)}</span>
+          </div>
+          <div class="total-row">
+            <span>Grand Total:</span>
+            <span class="qr">QR ${(Number(invoice.subtotal) + Number(invoice.tax)).toFixed(2)}</span>
+          </div>
+          ${Number(invoice.discount) > 0 ? `
+          <div class="total-row discount">
             <span>Discount:</span>
             <span class="qr">-QR ${Number(invoice.discount).toFixed(2)}</span>
           </div>
           ` : ''}
-          <div class="total-row">
-            <span>Tax:</span>
-            <span class="qr">QR ${Number(invoice.tax).toFixed(2)}</span>
-          </div>
           <div class="total-row final">
-            <span>Total:</span>
+            <span>Total Amount:</span>
             <span class="qr">QR ${Number(invoice.total).toFixed(2)}</span>
           </div>
         </div>
@@ -567,14 +571,24 @@ export class PDFService {
       <div class="total-section">
         <div class="total-row">
           <span>Subtotal:</span>
-          <span>QR ${Number(transaction.total).toFixed(2)}</span>
+          <span>QR ${Number(transaction.subtotal || 0).toFixed(2)}</span>
         </div>
         <div class="total-row">
-          <span>Tax:</span>
-          <span>QR 0.00</span>
+          <span>VAT (5%):</span>
+          <span>QR ${Number(transaction.vatAmount || transaction.tax || 0).toFixed(2)}</span>
         </div>
+        <div class="total-row">
+          <span>Grand Total:</span>
+          <span>QR ${(Number(transaction.subtotal || 0) + Number(transaction.vatAmount || transaction.tax || 0)).toFixed(2)}</span>
+        </div>
+        ${Number(transaction.discountAmount || 0) > 0 ? `
+        <div class="total-row">
+          <span>Discount:</span>
+          <span>-QR ${Number(transaction.discountAmount).toFixed(2)}</span>
+        </div>
+        ` : ''}
         <div class="total-row total-final">
-          <span>Total:</span>
+          <span>Total Amount:</span>
           <span>QR ${Number(transaction.total).toFixed(2)}</span>
         </div>
       </div>

@@ -43,7 +43,7 @@ export type Currency = typeof CURRENCIES[keyof typeof CURRENCIES];
 // VAT Rate configuration
 export const VAT_RATES = {
   NONE: 0,
-  STANDARD: 5, // 5% VAT (standard rate in Qatar)
+  STANDARD: 0, // 0% VAT (updated from 5%)
   REDUCED: 0,  // 0% for essential goods
   EXEMPT: 0,   // Exempt items
 } as const;
@@ -78,7 +78,7 @@ export const stores = pgTable("stores", {
   settings: jsonb("settings"), // Store-specific settings like tax rates, currency, etc.
   baseCurrency: text("base_currency").notNull().default("QAR"), // Store's base currency
   vatEnabled: boolean("vat_enabled").default(true), // Whether VAT is enabled for this store
-  defaultVatRate: decimal("default_vat_rate", { precision: 5, scale: 2 }).default("5.00"), // Default VAT rate percentage
+  defaultVatRate: decimal("default_vat_rate", { precision: 5, scale: 2 }).default("0.00"), // Default VAT rate percentage
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1005,7 +1005,15 @@ export const insertDayOperationSchema = createInsertSchema(dayOperations).omit({
 export const insertHeldTransactionSchema = createInsertSchema(heldTransactions).omit({ id: true, createdAt: true });
 export const insertCreditTransactionSchema = createInsertSchema(creditTransactions).omit({ id: true, createdAt: true });
 export const insertSupplierSchema = createInsertSchema(suppliers).omit({ id: true, createdAt: true });
-export const insertSupplierInvoiceSchema = createInsertSchema(supplierInvoices).omit({ id: true, createdAt: true });
+export const insertSupplierInvoiceSchema = createInsertSchema(supplierInvoices).omit({ id: true, createdAt: true }).extend({
+  invoiceDate: z.union([z.string(), z.date()]),
+  dueDate: z.union([z.string(), z.date(), z.null()]).optional(),
+  processedAt: z.union([z.string(), z.date(), z.null()]).optional(),
+  supplierId: z.number().optional(),
+  subtotal: z.union([z.string(), z.number()]).optional(),
+  tax: z.union([z.string(), z.number()]).optional(),
+  total: z.union([z.string(), z.number()]).optional(),
+});
 export const insertSupplierInvoiceItemSchema = createInsertSchema(supplierInvoiceItems).omit({ id: true });
 export const insertStockAdjustmentSchema = createInsertSchema(stockAdjustments).omit({ id: true, createdAt: true });
 export const insertSupplierPaymentSchema = createInsertSchema(supplierPayments).omit({ id: true, createdAt: true });

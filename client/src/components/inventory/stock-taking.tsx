@@ -204,6 +204,8 @@ export default function StockTaking() {
   const handleScan = async () => {
     if (!scanInput.trim()) return;
 
+    console.log('Manual scan triggered:', scanInput);
+
     try {
       // First check if it's an exact barcode match
       let response = await fetch(
@@ -212,17 +214,20 @@ export default function StockTaking() {
       let product = null;
 
       if (!response.ok) {
+        console.log('Product not found by barcode, trying SKU...');
         // If not found by barcode, try SKU
         response = await fetch(
           `/api/products/sku/${encodeURIComponent(scanInput)}`,
         );
         if (!response.ok) {
+          console.log('Product not found by SKU, trying search...');
           // If still not found, search by general query
           response = await fetch(
             `/api/products/search?q=${encodeURIComponent(scanInput)}`,
           );
           if (response.ok) {
             const products = await response.json();
+            console.log('Search results:', products);
             if (products.length === 1) {
               product = products[0];
             } else if (products.length > 1) {
@@ -236,12 +241,16 @@ export default function StockTaking() {
           }
         } else {
           product = await response.json();
+          console.log('Product found by SKU:', product);
         }
       } else {
         product = await response.json();
+        console.log('Product found by barcode:', product);
       }
 
       if (product) {
+        console.log('Product found, full data:', product);
+        
         // Check if already added
         const existingIndex = items.findIndex(
           (item) => item.productId === product.id,
@@ -255,51 +264,144 @@ export default function StockTaking() {
           return;
         }
 
+        // Calculate initial variance with actualQty of 1
+        const actualQty = 1;
+        const systemQty = Number(product.stock || 0);
+        const costPrice = parseFloat(String(product.costPrice || product.cost || "0"));
+        const sellingPrice = parseFloat(String(product.price || "0"));
+        const { variance, varianceValue } = calculateVariance(
+          systemQty,
+          actualQty,
+          costPrice,
+        );
+
         const newItem: StockTakingItem = {
           productId: product.id,
-          sku: product.sku,
-          barcode: product.barcode,
-          name: product.name,
+          sku: product.sku || scanInput,
+          barcode: product.barcode || scanInput,
+          name: product.name || `Product ${product.sku || scanInput}`,
           uom: product.uom || "ea",
-          systemQty: product.stock || 0,
-          actualQty: product.stock || 1,
-          costPrice: parseFloat(product.costPrice || product.cost || "0"),
-          sellingPrice: parseFloat(product.price || "0"),
+          systemQty: systemQty,
+          actualQty: actualQty,
+          costPrice: costPrice,
+          sellingPrice: sellingPrice,
           notes: "",
-          variance: 0,
-          varianceValue: 0,
+          variance: variance,
+          varianceValue: varianceValue,
           isNewProduct: false,
         };
 
-        setItems([...items, newItem]);
+        console.log('Adding new item to stock taking:', newItem);
+        setItems((prevItems) => [...prevItems, newItem]);
         setScanInput("");
         toast({
           title: "Product Added",
-          description: `${product.name} added to stock taking.`,
+          description: `${newItem.name} added to stock taking.`,
         });
       } else {
-        // Product not found - create new product entry
-        const newItem: StockTakingItem = {
-          sku: scanInput,
-          barcode: scanInput,
-          name: `New Product - ${scanInput}`,
-          uom: "ea",
-          systemQty: 0,
-          actualQty: 0,
-          costPrice: 0,
-          sellingPrice: 0,
-          notes: "",
-          variance: 0,
-          varianceValue: 0,
-          isNewProduct: true,
-        };
+        console.log('Product not found in system, trying AI lookup...');
+        // Product not found - try AI lookup for product details
+        try {
+          const aiResponse = await fetch('/api/products/ai-search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              query: scanInput, 
+              isBarcode: true 
+            })
+          });
 
-        setItems([...items, newItem]);
-        setScanInput("");
-        toast({
-          title: "New Product Added",
-          description: "Product not found in system. Added as new product.",
-        });
+          let productName = `New Product - ${scanInput}`;
+          let suggestedSKU = scanInput;
+          let suggestedCategory = "General";
+          let suggestedPrice = 0;
+
+          if (aiResponse.ok) {
+            const aiData = await aiResponse.json();
+            console.log('AI product info retrieved:', aiData);
+            
+            productName = aiData.name || productName;
+            suggestedSKU = aiData.sku || suggestedSKU;
+            suggestedPrice = aiData.suggestedPrice || 0;
+            
+            toast({
+              title: "Product Details Found",
+              description: `AI identified: ${productName}. Please review and adjust details.`,
+            });
+          } else {
+            console.log('AI lookup failed, using default values');
+            toast({
+              title: "Product Not Found",
+              description: "Could not fetch product details. Please enter manually.",
+              variant: "destructive",
+            });
+          }
+
+          const newItem: StockTakingItem = {
+            sku: suggestedSKU,
+            barcode: scanInput,
+            name: productName,
+            uom: "ea",
+            systemQty: 0,
+            actualQty: 1,
+            costPrice: 0,
+            sellingPrice: suggestedPrice,
+            notes: "",
+            variance: 1, // 1 - 0 = 1
+            varianceValue: 0,
+            isNewProduct: true,
+          };
+
+          setItems((prevItems) => {
+            const newItems = [...prevItems, newItem];
+            const newItemIndex = newItems.length - 1;
+            
+            // Auto-open edit mode for new products after state is updated
+            setTimeout(() => {
+              setEditingIndex(newItemIndex);
+              setEditForm(newItem);
+            }, 100);
+            
+            return newItems;
+          });
+          setScanInput("");
+        } catch (error) {
+          console.error('Error with AI lookup:', error);
+          toast({
+            title: "Error",
+            description: "Failed to fetch product details. Please enter manually.",
+            variant: "destructive",
+          });
+          
+          // Fallback: create basic new product entry
+          const newItem: StockTakingItem = {
+            sku: scanInput,
+            barcode: scanInput,
+            name: `New Product - ${scanInput}`,
+            uom: "ea",
+            systemQty: 0,
+            actualQty: 1,
+            costPrice: 0,
+            sellingPrice: 0,
+            notes: "",
+            variance: 1,
+            varianceValue: 0,
+            isNewProduct: true,
+          };
+
+          setItems((prevItems) => {
+            const newItems = [...prevItems, newItem];
+            const newItemIndex = newItems.length - 1;
+            
+            setTimeout(() => {
+              setEditingIndex(newItemIndex);
+              setEditForm(newItem);
+            }, 100);
+            
+            return newItems;
+          });
+          setScanInput("");
+        }
       }
     } catch (error) {
       console.error("Scan error:", error);
@@ -492,6 +594,7 @@ export default function StockTaking() {
   };
 
   const handleBarcodeScanned = async (barcode: string) => {
+    console.log('Barcode scanned:', barcode);
     setScanInput(barcode);
     setShowBarcodeScanner(false);
 
@@ -504,17 +607,20 @@ export default function StockTaking() {
       let product = null;
 
       if (!response.ok) {
+        console.log('Product not found by barcode, trying SKU...');
         // If not found by barcode, try SKU
         response = await fetch(
           `/api/products/sku/${encodeURIComponent(barcode)}`,
         );
         if (!response.ok) {
+          console.log('Product not found by SKU, trying search...');
           // If still not found, search by general query
           response = await fetch(
             `/api/products/search?q=${encodeURIComponent(barcode)}`,
           );
           if (response.ok) {
             const products = await response.json();
+            console.log('Search results:', products);
             if (products.length === 1) {
               product = products[0];
             } else if (products.length > 1) {
@@ -528,9 +634,11 @@ export default function StockTaking() {
           }
         } else {
           product = await response.json();
+          console.log('Product found by SKU:', product);
         }
       } else {
         product = await response.json();
+        console.log('Product found by barcode:', product);
       }
 
       if (product) {
@@ -548,57 +656,144 @@ export default function StockTaking() {
           return;
         }
 
+        // Calculate initial variance with actualQty of 1
+        const actualQty = 1;
+        const systemQty = Number(product.stock || 0);
+        const costPrice = parseFloat(String(product.costPrice || product.cost || "0"));
+        const sellingPrice = parseFloat(String(product.price || "0"));
+        const { variance, varianceValue } = calculateVariance(
+          systemQty,
+          actualQty,
+          costPrice,
+        );
+
         const newItem: StockTakingItem = {
           productId: product.id,
-          sku: product.sku,
-          barcode: product.barcode,
-          name: product.name,
+          sku: product.sku || barcode,
+          barcode: product.barcode || barcode,
+          name: product.name || `Product ${product.sku || barcode}`,
           uom: product.uom || "ea",
-          systemQty: product.stock || 0,
-          actualQty: 1, // Default to 1 for scanning
-          costPrice: parseFloat(product.costPrice || product.cost || "0"),
-          sellingPrice: parseFloat(product.price || "0"),
+          systemQty: systemQty,
+          actualQty: actualQty,
+          costPrice: costPrice,
+          sellingPrice: sellingPrice,
           notes: "",
-          variance: 0,
-          varianceValue: 0,
+          variance: variance,
+          varianceValue: varianceValue,
           isNewProduct: false,
         };
 
-        setItems([...items, newItem]);
+        console.log('Adding new item to stock taking via camera:', newItem);
+        setItems((prevItems) => [...prevItems, newItem]);
         setScanInput("");
         toast({
           title: "Product Scanned & Added",
-          description: `${product.name} automatically added to stock taking.`,
+          description: `${newItem.name} automatically added to stock taking.`,
         });
       } else {
-        // Product not found - create new product entry
-        const newItemIndex = items.length;
-        const newItem: StockTakingItem = {
-          sku: barcode,
-          barcode: barcode,
-          name: `New Product - ${barcode}`,
-          uom: "ea",
-          systemQty: 0,
-          actualQty: 1, // Default to 1 for new products
-          costPrice: 0,
-          sellingPrice: 0,
-          notes: "",
-          variance: 0,
-          varianceValue: 0,
-          isNewProduct: true,
-        };
+        console.log('Product not found in system, trying AI lookup for camera scan...');
+        // Product not found - try AI lookup for product details
+        try {
+          const aiResponse = await fetch('/api/products/ai-search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              query: barcode, 
+              isBarcode: true 
+            })
+          });
 
-        setItems([...items, newItem]);
-        setScanInput("");
-        
-        // Auto-open edit mode for new products
-        setEditingIndex(newItemIndex);
-        setEditForm(newItem);
-        
-        toast({
-          title: "New Product Scanned & Added",
-          description: `Barcode ${barcode} not found in system. Added as new product. Please fill in the details.`,
-        });
+          let productName = `New Product - ${barcode}`;
+          let suggestedSKU = barcode;
+          let suggestedCategory = "General";
+          let suggestedPrice = 0;
+
+          if (aiResponse.ok) {
+            const aiData = await aiResponse.json();
+            console.log('AI product info retrieved for camera scan:', aiData);
+            
+            productName = aiData.name || productName;
+            suggestedSKU = aiData.sku || suggestedSKU;
+            suggestedPrice = aiData.suggestedPrice || 0;
+            
+            toast({
+              title: "Product Details Found",
+              description: `AI identified: ${productName}. Please review and adjust details.`,
+            });
+          } else {
+            console.log('AI lookup failed for camera scan, using default values');
+            toast({
+              title: "Product Not Found",
+              description: "Could not fetch product details. Please enter manually.",
+              variant: "destructive",
+            });
+          }
+
+          const newItem: StockTakingItem = {
+            sku: suggestedSKU,
+            barcode: barcode,
+            name: productName,
+            uom: "ea",
+            systemQty: 0,
+            actualQty: 1,
+            costPrice: 0,
+            sellingPrice: suggestedPrice,
+            notes: "",
+            variance: 1, // 1 - 0 = 1
+            varianceValue: 0,
+            isNewProduct: true,
+          };
+
+          setItems((prevItems) => {
+            const newItems = [...prevItems, newItem];
+            const newItemIndex = newItems.length - 1;
+            
+            // Auto-open edit mode for new products after state is updated
+            setTimeout(() => {
+              setEditingIndex(newItemIndex);
+              setEditForm(newItem);
+            }, 100);
+            
+            return newItems;
+          });
+          setScanInput("");
+        } catch (error) {
+          console.error('Error with AI lookup for camera scan:', error);
+          toast({
+            title: "Error",
+            description: "Failed to fetch product details. Please enter manually.",
+            variant: "destructive",
+          });
+          
+          // Fallback: create basic new product entry
+          const newItem: StockTakingItem = {
+            sku: barcode,
+            barcode: barcode,
+            name: `New Product - ${barcode}`,
+            uom: "ea",
+            systemQty: 0,
+            actualQty: 1,
+            costPrice: 0,
+            sellingPrice: 0,
+            notes: "",
+            variance: 1,
+            varianceValue: 0,
+            isNewProduct: true,
+          };
+
+          setItems((prevItems) => {
+            const newItems = [...prevItems, newItem];
+            const newItemIndex = newItems.length - 1;
+            
+            setTimeout(() => {
+              setEditingIndex(newItemIndex);
+              setEditForm(newItem);
+            }, 100);
+            
+            return newItems;
+          });
+          setScanInput("");
+        }
       }
     } catch (error) {
       console.error("Barcode processing error:", error);

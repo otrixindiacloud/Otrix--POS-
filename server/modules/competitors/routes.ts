@@ -578,7 +578,7 @@ router.post("/batch-import", async (req, res) => {
         // Try to match
         const match = await matchCompetitorProduct(compProduct, ourCatalog);
 
-        if (match && match.confidence >= 70) {
+        if (match && match.confidence >= 60) {
           // Create competitor price entry
           const priceData = {
             competitorId: parseInt(competitorId),

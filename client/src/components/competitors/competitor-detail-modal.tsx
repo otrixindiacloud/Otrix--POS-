@@ -792,7 +792,10 @@ export default function CompetitorDetailModal({
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => window.open(price.productUrl, "_blank")}
+                                    onClick={() => {
+                                      const href = price.productUrl || undefined;
+                                      if (href) window.open(href, "_blank");
+                                    }}
                                   >
                                     <ExternalLink className="w-4 h-4" />
                                   </Button>

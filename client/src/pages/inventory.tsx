@@ -21,7 +21,7 @@ import { getCategoryLabel, getProductTypeLabel } from "@/config/product-categori
 
 type ViewMode = 'cards' | 'table' | 'list';
 type StockFilter = 'all' | 'in-stock' | 'out-of-stock' | 'low-stock';
-type SortField = 'name' | 'price' | 'quantity' | 'category';
+type SortField = 'name' | 'price' | 'quantity' | 'category' | 'recent';
 type SortOrder = 'asc' | 'desc';
 
 const PAGE_SIZE = 25;
@@ -40,8 +40,8 @@ export default function Inventory() {
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<StockFilter>('all');
-  const [sortField, setSortField] = useState<SortField>('name');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [sortField, setSortField] = useState<SortField>('recent');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -124,6 +124,8 @@ export default function Inventory() {
           return product.stock ?? 0;
         case "category":
           return product.category ?? "";
+        case "recent":
+          return (product as any).createdAt ? new Date((product as any).createdAt).getTime() : 0;
         default:
           return "";
       }
@@ -224,8 +226,8 @@ export default function Inventory() {
   const clearFilters = () => {
     setCategoryFilter('all');
     setStockFilter('all');
-    setSortField('name');
-    setSortOrder('asc');
+    setSortField('recent');
+    setSortOrder('desc');
     setSearchQuery('');
   };
 
@@ -477,6 +479,7 @@ export default function Inventory() {
                         <SelectValue placeholder="Sort by" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="recent">Recently Added</SelectItem>
                         <SelectItem value="name">Name</SelectItem>
                         <SelectItem value="price">Price</SelectItem>
                         <SelectItem value="quantity">Stock Quantity</SelectItem>

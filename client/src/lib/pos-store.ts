@@ -63,7 +63,7 @@ interface POSState {
   
   // Computed values
   getCartSubtotal: () => number;
-  getCartTax: () => number;
+  getCartVAT: () => number;
   getCartTotal: () => number;
   getCartItemCount: () => number;
   getTransactionDiscount: () => number;
@@ -197,7 +197,7 @@ export const usePOSStore = create<POSState>()(
             quantity: qty,
             total: (qty * priceValue).toFixed(2),
             imageUrl: product.imageUrl || undefined,
-            vatRate: parseFloat(product.vatRate?.toString() || '5'), // Use product's VAT rate or default to 5%
+            vatRate: parseFloat(product.vatRate?.toString() || '0'), // Use product's VAT rate or default to 0%
             stock: currentStock, // Store stock at time of adding
           };
           
@@ -406,25 +406,7 @@ export const usePOSStore = create<POSState>()(
       },
       
       clearTransactionDiscount: () => {
-        const cartItems = get().cartItems;
-        // Clear item-level discounts when clearing transaction discount
-        const updatedItems = cartItems.map(item => {
-          // Only clear discounts for regular items (not discount items)
-          if (item.sku?.startsWith('DISCOUNT-')) {
-            return item;
-          }
-          
-          const baseTotal = parseFloat(item.price) * item.quantity;
-          return {
-            ...item,
-            discountAmount: undefined,
-            discountType: undefined,
-            total: baseTotal.toFixed(2)
-          };
-        });
-        
         set({
-          cartItems: updatedItems,
           transactionDiscount: 0,
           transactionDiscountType: null,
           transactionDiscountValue: 0
@@ -473,28 +455,38 @@ export const usePOSStore = create<POSState>()(
       
       // Computed values
       getCartSubtotal: () => {
-        return get().cartItems.reduce((sum, item) => sum + parseFloat(item.total), 0);
+        // Subtotal = Sum(Item Price × Quantity) for all items
+        // This is the base amount before VAT and before discount
+        return get().cartItems.reduce((sum, item) => {
+          const price = parseFloat(item.price || '0');
+          const quantity = item.quantity || 0;
+          return sum + (price * quantity);
+        }, 0);
       },
       
-      getCartTax: () => {
+      getCartVAT: () => {
         const cartItems = get().cartItems;
         
-        // Enhanced VAT calculation using store-specific and category-specific rates
-        return cartItems.reduce((totalTax, item) => {
-          const itemSubtotal = parseFloat(item.total);
+        // VAT is calculated on the subtotal (price × quantity) BEFORE discount
+        // VAT = Subtotal × VAT%
+        return cartItems.reduce((totalVAT, item) => {
+          const price = parseFloat(item.price || '0');
+          const quantity = item.quantity || 0;
+          const itemSubtotal = price * quantity; // Calculate from price and quantity, not item.total
           
           // Determine VAT rate based on stored VAT rate
-          let vatRate = item.vatRate || 5; // Default to stored VAT rate or 5%
+          let vatRate = item.vatRate || 0; // Default to stored VAT rate or 0%
           
-          return totalTax + (itemSubtotal * vatRate) / 100;
+          return totalVAT + (itemSubtotal * vatRate) / 100;
         }, 0);
       },
       
       getCartTotal: () => {
         const subtotal = get().getCartSubtotal();
-        const tax = get().getCartTax();
+        const vat = get().getCartVAT();
         const discount = get().transactionDiscount || 0;
-        return subtotal + tax - discount;
+        // Total Amount = Grand Total (Subtotal + VAT) - Discount
+        return subtotal + vat - discount;
       },
       
       getTransactionDiscount: () => {

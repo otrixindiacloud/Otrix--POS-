@@ -61,9 +61,9 @@ export class VATCalculator {
       rateSource = "store-default";
     }
     
-    // Priority 4: System default (5%)
+    // Priority 4: System default (0%)
     if (applicableRate === 0) {
-      applicableRate = 5.0;
+      applicableRate = 0;
       rateSource = "system-default";
     }
     

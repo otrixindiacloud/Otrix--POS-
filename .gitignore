@@ -40,3 +40,7 @@ Thumbs.db
 static/invoices/*.html
 uploads/*
 
+.env.backup
+server.log
+test-delete.html
+test-invoice-extraction.js

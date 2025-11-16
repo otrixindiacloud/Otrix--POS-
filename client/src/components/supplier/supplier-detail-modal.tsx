@@ -284,13 +284,13 @@ export default function SupplierDetailModal({ isOpen, onClose, supplier }: Suppl
 
 
                     <div>
-                      <Label htmlFor="taxId">Tax ID</Label>
+                      <Label htmlFor="taxId">VAT ID</Label>
                       {isEditing ? (
                         <Input
                           id="taxId"
                           value={editData.taxId || ""}
                           onChange={(e) => setEditData({ ...editData, taxId: e.target.value })}
-                          placeholder="Enter tax identification number"
+                          placeholder="Enter VAT identification number"
                         />
                       ) : (
                         <p className="text-sm mt-1">{supplier.taxId || "Not provided"}</p>

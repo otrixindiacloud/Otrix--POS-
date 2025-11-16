@@ -77,7 +77,8 @@ export async function matchCompetitorProduct(
   // Strategy 3: AI-powered fuzzy matching
   const aiMatch = await aiMatchProduct(competitorProduct, ourCatalog);
   
-  if (aiMatch && aiMatch.confidence >= 70) {
+  // Slightly lower threshold to reduce false negatives
+  if (aiMatch && aiMatch.confidence >= 60) {
     return aiMatch;
   }
 
@@ -285,9 +286,16 @@ Include up to ${limit} matches with confidence >= 50.`;
 export async function extractProductFromUrl(url: string): Promise<CompetitorProduct | null> {
   
   try {
-    // Note: In production, you'd want to fetch the actual page content
-    // For now, we'll use the URL to make intelligent guesses
-    
+    // First try scraping the actual product page for accurate data
+    try {
+      const { scrapeProductPage } = await import("./services/ecommerce-scraper");
+      const scraped = await scrapeProductPage(url);
+      if (scraped && scraped.name) return scraped;
+    } catch (e) {
+      console.warn("Single product scraping failed, falling back to AI URL heuristic:", e);
+    }
+
+    // Fallback: Use AI heuristic based on the URL when scraping fails
     const prompt = `Extract product information from this URL: ${url}
 
 Analyze the URL structure and make intelligent predictions about:
@@ -328,7 +336,7 @@ Return JSON:
     return {
       name: result.name,
       sku: result.sku,
-      price: 0, // Will need to be filled in
+      price: 0,
       url,
     };
 

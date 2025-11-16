@@ -46,7 +46,7 @@ export default function PaymentModal() {
     currentTransactionNumber,
     resumedHeldTransactionId,
     getCartSubtotal,
-    getCartTax,
+    getCartVAT,
     getCartTotal,
     getTransactionDiscount,
     clearCart,
@@ -101,12 +101,10 @@ export default function PaymentModal() {
   }, [cartItems.length, showReceiptModal]);
 
   // Enhanced validation and calculations with better error handling
-  const subtotal = getCartSubtotal();
-  const tax = getCartTax();
-  const transactionDiscount = getTransactionDiscount();
-  const total = subtotal + tax - transactionDiscount;
-  
-  // Cash amount validation with numeric checks
+    const subtotal = getCartSubtotal();
+    const vat = getCartVAT();
+    const transactionDiscount = getTransactionDiscount();
+    const total = subtotal + vat - transactionDiscount;  // Cash amount validation with numeric checks
   const parsedCash = parseFloat(cashTendered);
   const safeCashTendered = isNaN(parsedCash) || parsedCash < 0 ? 0 : parsedCash;
   const changeDue = safeCashTendered > 0 ? Math.max(0, safeCashTendered - total) : 0;
@@ -152,8 +150,8 @@ export default function PaymentModal() {
         cashierId: user?.id || null,
         storeId: currentStore.id,
         subtotal: subtotal.toFixed(2),
-        tax: tax.toFixed(2),
-        vatAmount: tax.toFixed(2), // VAT amount same as tax
+        tax: vat.toFixed(2),
+        vatAmount: vat.toFixed(2), // VAT amount same as tax
         discountAmount: totalDiscount.toFixed(2),
         promotionDiscountAmount: "0.00", // No promotion discounts
         total: total.toFixed(2),
@@ -169,24 +167,23 @@ export default function PaymentModal() {
         orderType: "pos",
         tipAmount: null,
         items: cartItems.filter(item => !item.sku?.startsWith('DISCOUNT-')).map(item => {
-          const baseTotal = parseFloat(item.price) * item.quantity;
-          const discountAmount = item.discountAmount ? parseFloat(item.discountAmount) : 0;
-          let calculatedDiscount = 0;
+          const price = parseFloat(item.price);
+          const quantity = item.quantity;
+          const baseTotal = price * quantity; // Subtotal for this item (before VAT, before discount)
+          const itemVatRate = item.vatRate || 0; // Default 0% VAT
+          const vatAmount = (baseTotal * itemVatRate) / 100; // VAT on base total
           
-          if (item.discountType === 'percentage' && discountAmount > 0) {
-            calculatedDiscount = baseTotal * (discountAmount / 100);
-          } else if (item.discountType === 'fixed' && discountAmount > 0) {
-            calculatedDiscount = discountAmount;
-          }
+          // For transaction-level discount, we don't calculate item-level discount here
+          // The discount is applied at transaction level only
           
           return {
             productId: item.productId,
-            quantity: item.quantity,
+            quantity: quantity,
             unitPrice: item.price,
-            total: item.total,
-            vatRate: "5.00",
-            vatAmount: ((Number(item.total) * 0.05) / 1.05).toFixed(2),
-            discountAmount: calculatedDiscount.toFixed(2),
+            total: baseTotal.toFixed(2), // Item total before VAT (price × quantity)
+            vatRate: itemVatRate.toFixed(2),
+            vatAmount: vatAmount.toFixed(2), // VAT calculated on base total
+            discountAmount: "0.00", // Transaction-level discount, not item-level
             originalUnitPrice: item.price
           };
         })
@@ -704,7 +701,7 @@ export default function PaymentModal() {
               </div>
               <div className="flex justify-between">
                 <span>Tax:</span>
-                <span>QR {tax.toFixed(2)}</span>
+                <span>QR {vat.toFixed(2)}</span>
               </div>
               {transactionDiscount > 0 && (
                 <div className="flex justify-between text-green-600 dark:text-green-400">

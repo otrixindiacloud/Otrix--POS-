@@ -19,13 +19,13 @@ export default function DiscountModal({ isOpen, onClose }: DiscountModalProps) {
   const { 
     cartItems, 
     getCartSubtotal, 
-    getCartTax, 
+    getCartVAT, 
     getCartTotal,
     setTransactionDiscount,
-    updateCartItemDiscount,
     transactionDiscount,
     transactionDiscountType,
-    transactionDiscountValue
+    transactionDiscountValue,
+    clearTransactionDiscount
   } = usePOSStore();
   const { toast } = useToast();
 
@@ -35,8 +35,8 @@ export default function DiscountModal({ isOpen, onClose }: DiscountModalProps) {
   
   // Calculate original total before any discount for discount calculations
   const subtotal = getCartSubtotal();
-  const tax = getCartTax();
-  const originalNetTotal = subtotal + tax;
+  const vat = getCartVAT();
+  const originalNetTotal = subtotal + vat;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,7 +64,7 @@ export default function DiscountModal({ isOpen, onClose }: DiscountModalProps) {
       }
       // Calculate discount based on original total (before any existing discount)
       discountAmount = originalNetTotal * (value / 100);
-    } else {
+    } else if (discountType === "fixed") {
       if (value > originalNetTotal) {
         toast({
           title: "Error",
@@ -76,32 +76,7 @@ export default function DiscountModal({ isOpen, onClose }: DiscountModalProps) {
       discountAmount = value;
     }
 
-    // Apply discount proportionally to each cart item
-    const subtotal = getCartSubtotal();
-    
-    if (subtotal > 0 && cartItems.length > 0) {
-      // Filter out discount items
-      const validItems = cartItems.filter(item => !item.sku?.startsWith('DISCOUNT-'));
-      
-      if (discountType === "percentage") {
-        // Apply percentage discount to each item
-        validItems.forEach(item => {
-          const itemSubtotal = parseFloat(item.price) * item.quantity;
-          updateCartItemDiscount(item.productId ?? null, item.sku, value.toString(), 'percentage');
-        });
-      } else {
-        // Apply fixed amount discount proportionally based on item value
-        validItems.forEach(item => {
-          const itemSubtotal = parseFloat(item.price) * item.quantity;
-          const itemProportion = itemSubtotal / subtotal;
-          const itemDiscountAmount = discountAmount * itemProportion;
-          // Use fixed amount type for fixed discounts
-          updateCartItemDiscount(item.productId ?? null, item.sku, itemDiscountAmount.toFixed(2), 'fixed');
-        });
-      }
-    }
-
-    // Set transaction-level discount for backward compatibility
+    // Set transaction-level discount only (not item-level)
     setTransactionDiscount(discountAmount, discountType as 'percentage' | 'fixed', value);
 
     toast({
@@ -110,6 +85,17 @@ export default function DiscountModal({ isOpen, onClose }: DiscountModalProps) {
     });
 
     // Reset form and close modal
+    setDiscountValue("");
+    setDiscountType("percentage");
+    onClose();
+  };
+
+  const handleRemoveDiscount = () => {
+    clearTransactionDiscount();
+    toast({
+      title: "Success",
+      description: "Discount has been removed",
+    });
     setDiscountValue("");
     setDiscountType("percentage");
     onClose();
@@ -143,45 +129,90 @@ export default function DiscountModal({ isOpen, onClose }: DiscountModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-xl md:max-w-2xl w-full">
         <DialogHeader>
-          <DialogTitle className="flex items-center">
-            <Percent className="w-5 h-5 mr-2 text-green-600" />
+          <DialogTitle className="flex items-center text-xl">
+            <Percent className="w-6 h-6 mr-2 text-green-600" />
             Apply Discount
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-base">
             Apply a percentage or fixed amount discount to the current transaction
           </DialogDescription>
         </DialogHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="bg-slate-50 rounded-lg p-3">
-            <div className="text-sm text-slate-600 mb-1">Net Total:</div>
-            <div className="text-lg font-bold">QR {netTotal.toFixed(2)}</div>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {transactionDiscount > 0 && (
+            <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-base font-bold text-amber-900 mb-2">Current Discount Applied</div>
+                  <div className="text-sm text-amber-700 flex flex-wrap items-center gap-1">
+                    <span>
+                      {transactionDiscountType === 'percentage' 
+                        ? `${transactionDiscountValue}% discount` 
+                        : `QR ${transactionDiscountValue.toFixed(2)} discount`}
+                    </span>
+                    <span>=</span>
+                    <span className="font-semibold text-amber-900">QR {transactionDiscount.toFixed(2)}</span>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleRemoveDiscount}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
+                  title="Remove current discount"
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-slate-100 border border-slate-300 rounded-lg p-4">
+            <div className="text-sm font-medium text-slate-600 mb-2">Net Total:</div>
+            <div className="text-3xl font-bold text-slate-900 tracking-tight">QR {netTotal.toFixed(2)}</div>
           </div>
 
           <div>
-            <Label className="text-base font-medium">Discount Type</Label>
+            <Label className="text-lg font-semibold mb-3 block">Discount Type</Label>
             <RadioGroup value={discountType} onValueChange={setDiscountType} className="mt-2">
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="percentage" id="percentage" />
-                <Label htmlFor="percentage" className="flex items-center cursor-pointer">
-                  <Percent className="w-4 h-4 mr-1" />
-                  Percentage
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="dollar" id="dollar" />
-                <Label htmlFor="dollar" className="flex items-center cursor-pointer">
-                  <Coins className="w-4 h-4 mr-1" />
-                  Fixed Amount
-                </Label>
+              <div className="grid grid-cols-2 gap-3">
+                <label 
+                  htmlFor="percentage" 
+                  className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    discountType === 'percentage' 
+                      ? 'border-green-500 bg-green-50 shadow-sm' 
+                      : 'border-slate-200 hover:border-green-400 hover:bg-green-50'
+                  }`}
+                >
+                  <RadioGroupItem value="percentage" id="percentage" className="w-5 h-5 shrink-0" />
+                  <div className="flex items-center flex-1 min-w-0">
+                    <Percent className="w-5 h-5 mr-2 text-green-600 shrink-0" />
+                    <span className="text-base font-medium">Percentage Discount</span>
+                  </div>
+                </label>
+                <label 
+                  htmlFor="fixed" 
+                  className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    discountType === 'fixed' 
+                      ? 'border-green-500 bg-green-50 shadow-sm' 
+                      : 'border-slate-200 hover:border-green-400 hover:bg-green-50'
+                  }`}
+                >
+                  <RadioGroupItem value="fixed" id="fixed" className="w-5 h-5 shrink-0" />
+                  <div className="flex items-center flex-1 min-w-0">
+                    <Coins className="w-5 h-5 mr-2 text-green-600 shrink-0" />
+                    <span className="text-base font-medium">Fixed Amount</span>
+                  </div>
+                </label>
               </div>
             </RadioGroup>
           </div>
 
           <div>
-            <Label htmlFor="discountValue">
+            <Label htmlFor="discountValue" className="text-base font-semibold mb-2 block">
               {discountType === "percentage" ? "Percentage (%)" : "Amount (QR)"}
             </Label>
             <Input
@@ -190,35 +221,54 @@ export default function DiscountModal({ isOpen, onClose }: DiscountModalProps) {
               step={discountType === "percentage" ? "1" : "0.01"}
               min="0"
               max={discountType === "percentage" ? "100" : originalNetTotal.toString()}
-              placeholder={discountType === "percentage" ? "10" : "5.00"}
+              placeholder={discountType === "percentage" ? "Enter percentage (e.g., 10)" : "Enter amount (e.g., 5.00)"}
               value={discountValue}
               onChange={(e) => setDiscountValue(e.target.value)}
-              className="mt-1"
+              className="mt-1 h-12 text-lg"
               autoFocus
             />
           </div>
 
-          {discountValue && !isNaN(Number(discountValue)) && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-              <div className="text-sm text-green-700 mb-1">Discount Preview:</div>
-              <div className="text-lg font-bold text-green-800">
-                -QR {previewDiscount().toFixed(2)}
-              </div>
-              <div className="text-sm text-green-600">
-                New Total: QR {(originalNetTotal - previewDiscount()).toFixed(2)}
+          {discountValue && !isNaN(Number(discountValue)) && Number(discountValue) > 0 && (
+            <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4">
+              <div className="text-sm font-semibold text-green-700 uppercase tracking-wide mb-3">Discount Preview:</div>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm text-green-600 font-medium">Discount Amount:</span>
+                  <span className="text-2xl font-bold text-green-800">-QR {previewDiscount().toFixed(2)}</span>
+                </div>
+                <div className="flex items-baseline justify-between pt-2 border-t border-green-200">
+                  <span className="text-sm text-green-600 font-medium">New Total:</span>
+                  <span className="text-2xl font-bold text-green-900">QR {(originalNetTotal - previewDiscount()).toFixed(2)}</span>
+                </div>
               </div>
             </div>
           )}
 
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button type="button" variant="outline" onClick={handleClose}>
-              <X className="w-4 h-4 mr-2" />
-              Cancel
-            </Button>
-            <Button type="submit" className="bg-green-600 hover:bg-green-700">
-              <Percent className="w-4 h-4 mr-2" />
-              Apply Discount
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t-2 border-slate-200">
+            <div className="flex-shrink-0">
+              {transactionDiscount > 0 && (
+                <Button 
+                  type="button" 
+                  variant="destructive" 
+                  onClick={handleRemoveDiscount}
+                  className="bg-red-600 hover:bg-red-700 h-11 px-5 text-base"
+                >
+                  <X className="w-5 h-5 mr-2" />
+                  Remove Discount
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-3 ml-auto">
+              <Button type="button" variant="outline" onClick={handleClose} className="h-11 px-5 text-base">
+                <X className="w-5 h-5 mr-2" />
+                Cancel
+              </Button>
+              <Button type="submit" className="bg-green-600 hover:bg-green-700 h-11 px-6 text-base font-semibold">
+                <Percent className="w-5 h-5 mr-2" />
+                Apply Discount
+              </Button>
+            </div>
           </div>
         </form>
       </DialogContent>

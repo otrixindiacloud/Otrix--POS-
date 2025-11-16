@@ -32,7 +32,16 @@ export async function generateDynamicReport(userQuery: string): Promise<ReportRe
   // Check if we have a valid OpenAI API key
   // To get an API key: https://platform.openai.com/api-keys
   const apiKey = process.env.OPENAI_API_KEY;
+  
+  console.log('🔍 AI Report Generation - API Key Check:');
+  console.log('  - Key exists:', !!apiKey);
+  console.log('  - Key length:', apiKey?.length || 0);
+  console.log('  - Starts with sk-:', apiKey?.startsWith('sk-') || false);
+  console.log('  - First 15 chars:', apiKey?.substring(0, 15) || 'N/A');
+  
   if (!apiKey || apiKey === 'set-me' || !apiKey.startsWith('sk-') || apiKey.length < 20) {
+    const errorDetails = `API Key validation failed: exists=${!!apiKey}, length=${apiKey?.length || 0}, starts with sk-=${apiKey?.startsWith('sk-') || false}`;
+    console.error('❌ API Key Validation Error:', errorDetails);
     throw new Error('OpenAI API key is required. Please set a valid OpenAI API key in your .env file. Get one at https://platform.openai.com/api-keys (it should start with "sk-")');
   }
 
@@ -46,7 +55,7 @@ export async function generateDynamicReport(userQuery: string): Promise<ReportRe
           content: `You are an expert PostgreSQL analyst for a Point of Sale (POS) system. Generate ONLY PostgreSQL-compatible SQL queries based on natural language requests.
 
 Database Schema:
-- transactions: id, transaction_number, customer_id, cashier_id, subtotal, tax, total, status, payment_method, created_at, cash_tendered, card_type, card_last4, auth_code, receipt_printed
+- transactions: id, transaction_number, customer_id, cashier_id, subtotal, tax (VAT amount), total, status, payment_method, created_at, cash_tendered, card_type, card_last4, auth_code, receipt_printed
 - transaction_items: id, transaction_id, product_id, quantity, unit_price, total
 - products: id, sku, name, description, price, cost, stock, quantity, barcode, image_url, category, supplier_id, is_active
 - customers: id, name, email, phone, address, credit_balance, credit_limit, is_active
@@ -122,8 +131,21 @@ IMPORTANT: Always respond with valid JSON format containing the required fields.
     };
 
   } catch (error) {
-    console.error('Error generating dynamic report:', error);
-    throw new Error('Failed to generate report: ' + (error as Error).message);
+    console.error('❌ Error generating dynamic report:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Check for specific OpenAI API errors
+    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized') || errorMessage.includes('Invalid API key')) {
+      throw new Error('Invalid OpenAI API key. Please check your API key at https://platform.openai.com/api-keys');
+    }
+    if (errorMessage.includes('429') || errorMessage.includes('rate limit')) {
+      throw new Error('OpenAI rate limit exceeded. Please try again in a moment.');
+    }
+    if (errorMessage.includes('quota') || errorMessage.includes('billing')) {
+      throw new Error('OpenAI API quota exceeded or billing issue. Please check your OpenAI account.');
+    }
+    
+    throw new Error('Failed to generate report: ' + errorMessage);
   }
 }
 

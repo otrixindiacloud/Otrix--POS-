@@ -452,13 +452,13 @@ export default function InvoiceWizardPage() {
 
   const updateHeaderTotals = (items: any[]) => {
     const subtotal = items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
-    const tax = subtotal * 0.05; // 5% VAT
-    const total = subtotal + tax;
+    const vat = subtotal * 0; // 0% VAT
+    const total = subtotal + vat;
     
     setHeaderDetails(prev => ({
       ...prev,
       subtotal: Number(subtotal.toFixed(2)),
-      tax: Number(tax.toFixed(2)),
+      tax: Number(vat.toFixed(2)),
       total: Number(total.toFixed(2)),
     }));
   };
@@ -1099,7 +1099,7 @@ export default function InvoiceWizardPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="tax">Tax (QR)</Label>
+                    <Label htmlFor="tax">VAT (QR)</Label>
                     <Input
                       id="tax"
                       type="number"
@@ -1348,7 +1348,7 @@ export default function InvoiceWizardPage() {
                         <span>QR {headerDetails.subtotal.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Tax:</span>
+                        <span>VAT:</span>
                         <span>QR {headerDetails.tax.toFixed(2)}</span>
                       </div>
                       <Separator />
@@ -1404,19 +1404,30 @@ export default function InvoiceWizardPage() {
           <div className="sticky bottom-0 z-10 bg-white border-t shadow-lg">
             <div className="p-6">
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                {/* Previous Button */}
-                <Button 
-                  variant="outline" 
-                  onClick={handlePrevStep}
-                  disabled={currentStep === 1}
-                  className={cn(
-                    "flex items-center gap-2 px-6 py-2.5 w-full sm:w-auto",
-                    currentStep === 1 && "opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Previous</span>
-                </Button>
+                {/* Previous and Cancel Buttons */}
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <Button 
+                    variant="outline" 
+                    onClick={handlePrevStep}
+                    disabled={currentStep === 1}
+                    className={cn(
+                      "flex items-center gap-2 px-6 py-2.5 flex-1 sm:flex-initial",
+                      currentStep === 1 && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Previous</span>
+                  </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setLocation('/invoices')}
+                    className="flex items-center gap-2 px-6 py-2.5 flex-1 sm:flex-initial border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>Cancel</span>
+                  </Button>
+                </div>
 
                 {/* Center Progress Indicator */}
                 <div className="flex items-center gap-4 order-first sm:order-none w-full sm:w-auto justify-center">

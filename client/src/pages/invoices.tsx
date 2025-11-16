@@ -33,7 +33,9 @@ import {
   Image,
   ImageOff,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Trash2,
+  Loader2
 } from "lucide-react";
 import type { Supplier, SupplierInvoice } from "@shared/schema";
 import MainLayout from "@/components/layout/main-layout";
@@ -48,9 +50,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton-loader";
 import LoadingSpinner from "@/components/ui/loading-spinner";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Invoices() {
   const [searchQuery, setSearchQuery] = useState("");
+  const { toast } = useToast();
 
   const [showEnhancedInvoiceModal, setShowEnhancedInvoiceModal] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -81,7 +85,97 @@ export default function Invoices() {
     queryKey: ["/api/supplier-invoices"],
   });
 
+  // Delete invoice mutation
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: async (invoiceId: number) => {
+      try {
+        console.log("Attempting to delete invoice:", invoiceId);
+        const response = await apiRequest("DELETE", `/api/supplier-invoices/${invoiceId}`);
+        const data = await response.json();
+        console.log("Delete response:", data);
+        return data;
+      } catch (error) {
+        console.error("Delete invoice mutation error:", error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/supplier-invoices"] });
+      toast({
+        title: "Invoice Deleted",
+        description: "Invoice has been successfully deleted.",
+      });
+    },
+    onError: (error: Error) => {
+      console.error("Delete invoice error:", error);
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete invoice. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
+  // Delete supplier mutation
+  const deleteSupplierMutation = useMutation({
+    mutationFn: async (supplierId: number) => {
+      try {
+        console.log("Attempting to delete supplier:", supplierId);
+        const response = await apiRequest("DELETE", `/api/suppliers/${supplierId}`);
+        const data = await response.json();
+        console.log("Delete supplier response:", data);
+        return data;
+      } catch (error) {
+        console.error("Delete supplier mutation error:", error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
+      toast({
+        title: "Supplier Deleted",
+        description: "Supplier has been successfully deleted.",
+      });
+    },
+    onError: (error: Error) => {
+      console.error("Delete supplier error:", error);
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete supplier. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteInvoice = async (invoiceId: number, event?: React.MouseEvent) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
+    if (window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
+      try {
+        await deleteInvoiceMutation.mutateAsync(invoiceId);
+      } catch (error) {
+        console.error("Error deleting invoice:", error);
+      }
+    }
+  };
+
+  const handleDeleteSupplier = async (supplierId: number, event?: React.MouseEvent) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
+    if (window.confirm('Are you sure you want to delete this supplier? This action cannot be undone.')) {
+      try {
+        await deleteSupplierMutation.mutateAsync(supplierId);
+      } catch (error) {
+        console.error("Error deleting supplier:", error);
+      }
+    }
+  };
 
   const handleCreateInvoice = (type: 'receipt' | 'return') => {
     setShowEnhancedInvoiceModal(true);
@@ -682,7 +776,7 @@ export default function Invoices() {
                                 QR {parseFloat(invoice.total).toFixed(2)}
                               </div>
                               <div className="text-xs text-slate-500">
-                                Tax: QR {parseFloat(invoice.tax || '0').toFixed(2)}
+                                VAT: QR {parseFloat(invoice.tax || '0').toFixed(2)}
                               </div>
                             </TableCell>
 
@@ -871,15 +965,17 @@ export default function Invoices() {
 
                           {/* Actions */}
                           <TableCell className="text-right">
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleEditSupplier(supplier)}
-                              className="h-8"
-                            >
-                              <Edit className="w-4 h-4 mr-1.5" />
-                              <span>Edit</span>
-                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleEditSupplier(supplier)}
+                                className="h-8"
+                              >
+                                <Edit className="w-4 h-4 mr-1.5" />
+                                <span>Edit</span>
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}

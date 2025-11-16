@@ -1160,7 +1160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           <div class="total">
             <p>Subtotal: QR ${parseFloat(String(transaction.subtotal)).toFixed(2)}</p>
-            <p>Tax: QR ${parseFloat(String(transaction.tax)).toFixed(2)}</p>
+            <p>VAT: QR ${parseFloat(String(transaction.tax)).toFixed(2)}</p>
             <p><strong>Total: QR ${parseFloat(String(transaction.total)).toFixed(2)}</strong></p>
           </div>
 
@@ -1430,14 +1430,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Stock Upload endpoint
-  app.post("/api/inventory/upload-stock", upload.single('file'), async (req, res) => {
+  app.post("/api/inventory/upload-stock", isAuthenticated, upload.single('file'), async (req, res) => {
     try {
+      console.log('📤 Stock upload request received');
+      console.log('  - File:', req.file ? req.file.originalname : 'NO FILE');
+      console.log('  - User:', req.user?.username || 'anonymous');
+      
       if (!req.file) {
+        console.error('❌ No file uploaded');
         return res.status(400).json({ success: false, message: "No file uploaded" });
       }
 
       const filePath = req.file.path;
       const fileExtension = req.file.originalname.split('.').pop()?.toLowerCase();
+      
+      console.log('  - File path:', filePath);
+      console.log('  - File extension:', fileExtension);
       
       let stockData: any[] = [];
       
@@ -1480,8 +1488,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-        // For Excel files
-        const workbook = XLSX.readFile(filePath);
+        // For Excel files, read as buffer first
+        const fileBuffer = fs.readFileSync(filePath);
+        const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         stockData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -1607,8 +1616,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errors: errors.slice(0, 10) // Limit errors to first 10
       };
 
+      console.log('✅ Stock upload completed:', result);
       res.json(result);
     } catch (error) {
+      console.error('❌ Stock upload error:', error);
+      
       // Clean up file in case of error
       if (req.file?.path) {
         try {
@@ -1618,10 +1630,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      console.error("Stock upload error:", error);
-      res.status(500).json({ 
-        success: false, 
-        message: "Internal server error during upload processing" 
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to process stock upload',
+        processedCount: 0,
+        newProductsCount: 0,
+        updatedProductsCount: 0,
+        errors: [error instanceof Error ? error.message : 'Unknown error']
       });
     }
   });

@@ -796,19 +796,31 @@ export class DatabaseStorage implements IStorage {
 
   async updateDayOperation(id: number, dayOp: Partial<InsertDayOperation>): Promise<DayOperation | undefined> {
     const updateData: any = { ...dayOp };
-    if (dayOp.status === 'closed') {
+    
+    // Handle status-specific updates
+    if (dayOp.status === 'closed' && !('closedAt' in updateData)) {
+      // Only set closedAt if not already provided
       updateData.closedAt = new Date();
-    } else if (dayOp.status === 'open' && 'reopenedAt' in dayOp) {
-      // Handle reopening
+    } else if (dayOp.status === 'open' && 'reopenedAt' in updateData) {
+      // Handle reopening - clear closedAt
       updateData.closedAt = null;
-      updateData.reopenedAt = new Date();
+      if (!('reopenedAt' in updateData) || !updateData.reopenedAt) {
+        updateData.reopenedAt = new Date();
+      }
     }
+    
+    console.log('📝 Updating day operation:', id, 'with status:', dayOp.status);
     
     const [updatedDayOp] = await db
       .update(dayOperations)
       .set(updateData)
       .where(eq(dayOperations.id, id))
       .returning();
+      
+    if (updatedDayOp) {
+      console.log('✅ Day operation updated:', updatedDayOp.id, 'status:', updatedDayOp.status);
+    }
+    
     return updatedDayOp || undefined;
   }
 
@@ -2497,7 +2509,7 @@ export class DatabaseStorage implements IStorage {
 
     // Get default VAT rate from store
     const [store] = await db.select().from(stores).where(eq(stores.id, storeId));
-    return store?.defaultVatRate ? parseFloat(store.defaultVatRate) : 5.00;
+    return store?.defaultVatRate ? parseFloat(store.defaultVatRate) : 0.00;
   }
 
   async calculateVAT(items: any[], storeId: number): Promise<{ vatAmount: number; itemsWithVat: any[] }> {

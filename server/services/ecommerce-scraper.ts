@@ -22,6 +22,124 @@ export interface ScrapeResult {
 }
 
 /**
+ * Scrape a single product page for detailed product data
+ */
+export async function scrapeProductPage(url: string): Promise<CompetitorProduct | null> {
+  let browser: Browser | null = null;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+      ],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_BIN || undefined,
+    });
+
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1366, height: 768 });
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    );
+
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+
+    // Try common selectors for product page details
+    const result = await page.evaluate(() => {
+      const getText = (selList: string[]): string | undefined => {
+        for (const sel of selList) {
+          const el = document.querySelector(sel);
+          const txt = el?.textContent?.trim();
+          if (txt) return txt;
+        }
+        return undefined;
+      };
+
+      // Name
+      const name = getText([
+        "h1.product-title",
+        "h1.product_name",
+        "h1[itemprop='name']",
+        "h1",
+        ".product-title",
+        "[class*='product'] h1",
+      ]);
+
+      // Price
+      let priceText = getText([
+        "[itemprop='price']",
+        ".price .amount",
+        ".price .woocommerce-Price-amount",
+        ".product-price",
+        "[class*='price']",
+      ]);
+      if (!priceText) {
+        const metaPrice = document.querySelector("meta[itemprop='price']") as HTMLMetaElement | null;
+        priceText = metaPrice?.content || undefined;
+      }
+      const priceMatch = priceText?.match(/[\d,]+\.?\d*/);
+      const price = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, "")) : 0;
+
+      // Original price
+      const originalPriceText = getText([
+        ".old-price",
+        ".strike-through",
+        ".compare-at-price",
+      ]);
+      const origMatch = originalPriceText?.match(/[\d,]+\.?\d*/);
+      const originalPrice = origMatch ? parseFloat(origMatch[0].replace(/,/g, "")) : undefined;
+
+      // SKU / Barcode
+      const skuText = getText([".sku", "[itemprop='sku']", "[class*='sku']"]); 
+      const barcodeText = getText([".barcode", "[class*='barcode']", "[itemprop='gtin13']", "[itemprop='gtin']"]);
+
+      // Description
+      const description = getText([
+        ".product-description",
+        "[itemprop='description']",
+        ".woocommerce-product-details__short-description",
+        ".short-description",
+        ".description",
+      ]);
+
+      // Image
+      const imgEl = (document.querySelector(".product-image img, .woocommerce-product-gallery__image img, img") as HTMLImageElement | null);
+      let imageUrl = imgEl?.getAttribute("src") || imgEl?.getAttribute("data-src") || undefined;
+      if (imageUrl && !imageUrl.startsWith("http")) {
+        try { imageUrl = new URL(imageUrl, window.location.href).href; } catch {}
+      }
+
+      // Availability
+      const pageText = document.body.textContent?.toLowerCase() || "";
+      let availability: string | undefined;
+      if (pageText.includes("out of stock") || pageText.includes("unavailable")) availability = "out_of_stock";
+      else if (pageText.includes("in stock") || pageText.includes("available")) availability = "in_stock";
+
+      return {
+        name: name || "",
+        price,
+        originalPrice,
+        sku: skuText || undefined,
+        barcode: barcodeText || undefined,
+        imageUrl,
+        description: description || undefined,
+        availability,
+      };
+    });
+
+    if (!result?.name) return null;
+    return { ...result, url } as CompetitorProduct;
+  } catch (err) {
+    console.error("Single product scraping error:", err);
+    return null;
+  } finally {
+    if (browser) await browser.close();
+  }
+}
+
+/**
  * Scrape all products from ansargallery e-commerce portal
  */
 export async function scrapeAnsargallery(
@@ -47,7 +165,17 @@ export async function scrapeAnsargallery(
         "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
         "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-sync",
+        "--metrics-recording-only",
+        "--mute-audio",
+        "--no-first-run",
+        "--disable-default-apps",
+        "--single-process",
       ],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_BIN || undefined,
     });
 
     const page = await browser.newPage();
@@ -218,7 +346,7 @@ export async function scrapeAnsargallery(
             ? nextPageButton
             : new URL(nextPageButton, baseUrl).href;
           await page.goto(nextUrl, { waitUntil: "networkidle2", timeout: 30000 });
-          await page.waitForTimeout(delay);
+          await new Promise(resolve => setTimeout(resolve, delay));
           pageNumber++;
         } catch (e) {
           console.log("Could not navigate to next page:", e);

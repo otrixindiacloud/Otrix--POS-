@@ -135,14 +135,60 @@ export default function CompetitorImportModal({
       const response = await apiRequest("POST", "/api/competitors/extract-from-url", { url });
       return await response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       if (data.success && data.product) {
-        setProductName(data.product.name || "");
-        setProductSku(data.product.sku || "");
+        // Create product from extracted data
+        const extractedProduct: CompetitorProduct = {
+          name: data.product.name || "",
+          sku: data.product.sku || undefined,
+          barcode: data.product.barcode || undefined,
+          price: parseFloat(data.product.price) || 0,
+          url: extractUrl,
+          imageUrl: data.product.imageUrl || undefined,
+          description: data.product.description || undefined,
+          availability: data.product.availability || undefined,
+        };
+        
+        // Add to products list
+        setProducts([extractedProduct]);
+        
         toast({
           title: "Product Info Extracted",
-          description: "Product information extracted from URL",
+          description: "Product information extracted from URL. Matching with catalog...",
         });
+        
+        // Automatically match the product
+        try {
+          const matchResult = await matchMutation.mutateAsync(extractedProduct);
+          const newMatches = new Map<string, ProductMatch | null>();
+          
+          if (matchResult.suggestions && matchResult.suggestions.length > 0) {
+            newMatches.set(extractedProduct.name, matchResult.suggestions[0]);
+            toast({
+              title: "Match Found",
+              description: `Matched to: ${matchResult.suggestions[0].productName}`,
+            });
+          } else {
+            newMatches.set(extractedProduct.name, null);
+            toast({
+              title: "No Match Found",
+              description: "Could not find matching product in catalog",
+              variant: "destructive",
+            });
+          }
+          
+          setMatches(newMatches);
+          setStep('review');
+        } catch (error) {
+          // If matching fails, still show the review step
+          setMatches(new Map([[extractedProduct.name, null]]));
+          setStep('review');
+          toast({
+            title: "Matching Error",
+            description: "Could not match product, but you can still review it",
+            variant: "destructive",
+          });
+        }
       } else {
         toast({
           title: "Extraction Failed",
@@ -150,6 +196,13 @@ export default function CompetitorImportModal({
           variant: "destructive",
         });
       }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Extraction Error",
+        description: error.message || "Failed to extract product information",
+        variant: "destructive",
+      });
     },
   });
 
@@ -159,13 +212,49 @@ export default function CompetitorImportModal({
       const response = await apiRequest("POST", "/api/competitors/scrape-portal", data);
       return await response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       if (data.success && data.products) {
         setProducts(data.products);
         setStep('review');
+        
         toast({
           title: "Scraping Complete",
-          description: `Found ${data.totalFound} products from the portal`,
+          description: `Found ${data.totalFound} products. Matching with your catalog...`,
+        });
+        
+        // Auto-match all scraped products
+        const newMatches = new Map<string, ProductMatch | null>();
+        let matchedCount = 0;
+        let totalProducts = data.products.length;
+        
+        for (let i = 0; i < data.products.length; i++) {
+          const product = data.products[i];
+          try {
+            const result = await matchMutation.mutateAsync(product);
+            if (result.suggestions && result.suggestions.length > 0) {
+              newMatches.set(product.name, result.suggestions[0]);
+              matchedCount++;
+            } else {
+              newMatches.set(product.name, null);
+            }
+          } catch (error) {
+            newMatches.set(product.name, null);
+          }
+          
+          // Update progress
+          if ((i + 1) % 10 === 0 || i === data.products.length - 1) {
+            toast({
+              title: "Matching Progress",
+              description: `Matched ${i + 1}/${totalProducts} products (${matchedCount} found)`,
+            });
+          }
+        }
+        
+        setMatches(newMatches);
+        
+        toast({
+          title: "Matching Complete",
+          description: `${matchedCount} of ${totalProducts} products matched to your catalog`,
         });
       } else {
         toast({
@@ -214,17 +303,24 @@ export default function CompetitorImportModal({
   const importToInventoryMutation = useMutation({
     mutationFn: async (products: CompetitorProduct[]) => {
       // Convert competitor products to inventory products
-      const inventoryProducts = products.map((p) => ({
-        name: p.name,
-        sku: p.sku || `COMP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        barcode: p.barcode,
-        price: p.price.toString(),
-        cost: p.originalPrice ? p.originalPrice.toString() : undefined,
-        description: p.description,
-        imageUrl: p.imageUrl,
-        quantity: 0,
-        stock: 0,
-      }));
+      const inventoryProducts = products.map((p) => {
+        // Clean and validate price
+        let cleanPrice = typeof p.price === 'number' ? p.price : parseFloat(String(p.price).replace(/[^0-9.]/g, ''));
+        if (isNaN(cleanPrice)) cleanPrice = 0;
+
+        return {
+          name: p.name?.trim() || 'Unknown Product',
+          sku: p.sku || `COMP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          barcode: p.barcode || undefined,
+          price: cleanPrice.toFixed(2),
+          cost: p.originalPrice ? parseFloat(String(p.originalPrice).replace(/[^0-9.]/g, '')).toFixed(2) : undefined,
+          description: p.description || undefined,
+          imageUrl: p.imageUrl || undefined,
+          quantity: 0,
+          stock: 0,
+          category: 'Imported',
+        };
+      });
 
       const response = await apiRequest("POST", "/api/products/bulk", {
         products: inventoryProducts,
@@ -233,16 +329,25 @@ export default function CompetitorImportModal({
     },
     onSuccess: (results) => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      
+      if (results.errors && results.errors.length > 0) {
+        console.error('Import errors:', results.errors);
+      }
+      
       toast({
         title: "Products Added to Inventory",
-        description: `${results.created} products added to inventory${results.failed > 0 ? `, ${results.failed} failed` : ""}`,
+        description: `${results.created} products added successfully${results.failed > 0 ? `. ${results.failed} failed - check console for details` : ""}`,
+        variant: results.created > 0 ? "default" : "destructive",
       });
-      handleClose();
+      
+      if (results.created > 0) {
+        handleClose();
+      }
     },
     onError: (error: any) => {
       toast({
         title: "Import Failed",
-        description: error.message,
+        description: error.message || "Failed to import products to inventory",
         variant: "destructive",
       });
     },

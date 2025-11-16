@@ -337,17 +337,6 @@ export default function ProductSearchBar({
   const lastCashAmount = lastCashTransaction
     ? parseFloat(String(lastCashTransaction.total || 0)).toFixed(2)
     : null;
-  
-  // Calculate amount tendered and change for last cash transaction
-  const lastCashTendered = lastCashTransaction?.cashTendered 
-    ? parseFloat(String(lastCashTransaction.cashTendered))
-    : null;
-  const lastCashTotal = lastCashTransaction?.total
-    ? parseFloat(String(lastCashTransaction.total))
-    : null;
-  const lastCashChange = lastCashTendered && lastCashTotal
-    ? Math.max(0, lastCashTendered - lastCashTotal)
-    : null;
 
   const formatDisplayDate = (dateValue: any) => {
     try {
@@ -833,27 +822,18 @@ export default function ProductSearchBar({
             <Label className="text-sm font-semibold text-foreground">
               Product Search
             </Label>
-            <div className="flex items-center gap-24">
-              {lastCashTendered !== null && (
-                <div className="border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 bg-slate-50 dark:bg-slate-800">
-                  <div className="flex items-center gap-4 text-xs">
-                    <span className="text-slate-700 dark:text-slate-300">
-                      <span className="font-medium">Cash amount:</span> QR {lastCashTendered.toFixed(2)}
-                    </span>
-                    {lastCashChange !== null && (
-                      <span className="text-green-700 dark:text-green-300">
-                        <span className="font-medium">Change Due:</span> QR {lastCashChange.toFixed(2)}
-                      </span>
-                    )}
-                  </div>
-                </div>
+            <div className="flex items-center gap-2">
+              {lastCashAmount && (
+                <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                  Last Cash: QR {lastCashAmount}
+                </Badge>
               )}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setShowReduceItemModal(true)}
-                className="text-xs bg-accent text-white hover:bg-accent hover:brightness-110"
+                className="text-xs"
               >
                 <ScanLine className="w-3 h-3 mr-1" />
                 Reduce Item
@@ -910,36 +890,31 @@ export default function ProductSearchBar({
           <Label className="text-sm font-semibold text-foreground">
             Recent Transactions
           </Label>
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold text-white bg-blue-600 px-2 py-1 rounded-md">
-              Total: {recentTransactions.length}
-            </span>
-            {recentTransactions.length > itemsPerPage && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRecentTransactionsPage(prev => Math.max(1, prev - 1))}
-                  disabled={safePage <= 1}
-                  className="h-7 w-7 p-0"
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  {safePage} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRecentTransactionsPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={safePage >= totalPages}
-                  className="h-7 w-7 p-0"
-                >
-                  <ChevronRight className="w-3 h-3" />
-                </Button>
-              </div>
-            )}
-          </div>
+          {recentTransactions.length > itemsPerPage && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRecentTransactionsPage(prev => Math.max(1, prev - 1))}
+                disabled={safePage <= 1}
+                className="h-7 w-7 p-0"
+              >
+                <ChevronLeft className="w-3 h-3" />
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {safePage} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRecentTransactionsPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={safePage >= totalPages}
+                className="h-7 w-7 p-0"
+              >
+                <ChevronRight className="w-3 h-3" />
+              </Button>
+            </div>
+          )}
         </div>
         
         {transactionsLoading ? (

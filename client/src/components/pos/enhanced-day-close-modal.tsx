@@ -180,6 +180,68 @@ interface ReconciliationData {
   editableOpeningBankBalance?: number;
 }
 
+const DECIMAL_FIELDS = new Set<string>([
+  "openingCash",
+  "openingBankBalance",
+  "totalSales",
+  "cashSales",
+  "cardSales",
+  "creditSales",
+  "splitSales",
+  "cashPurchases",
+  "cardPurchases",
+  "bankPurchases",
+  "ownerDeposits",
+  "ownerWithdrawals",
+  "ownerBankDeposits",
+  "ownerBankWithdrawals",
+  "expensePayments",
+  "supplierPayments",
+  "bankTransfers",
+  "expectedCash",
+  "actualCashCount",
+  "closingCash",
+  "cashDifference",
+  "expectedBankBalance",
+  "actualBankBalance",
+  "bankDifference",
+  "posCardSwipeAmount",
+  "cardSwipeVariance",
+  "bankWithdrawals",
+  "cashMiscAmount",
+  "cardMiscAmount",
+  "creditPaymentsCash",
+  "creditPaymentsCard",
+  "creditRefundsGiven",
+  "creditNetImpact",
+  "editableTotalSales",
+  "editableCashSales",
+  "editableCardSales",
+  "editableCreditSales",
+  "editableSplitSales",
+  "editableOpeningCash",
+  "editableOpeningBankBalance"
+]);
+
+const serializeDayClosePayload = (data: Record<string, unknown>) => {
+  const serialized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (DECIMAL_FIELDS.has(key) && typeof value === "number") {
+      serialized[key] = Number.isFinite(value) ? value.toFixed(2) : "0.00";
+      continue;
+    }
+
+    serialized[key] = value;
+  }
+
+  return serialized;
+};
+
 export default function EnhancedDayCloseModal({ isOpen, onClose, dayOperation }: EnhancedDayCloseModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -372,6 +434,17 @@ export default function EnhancedDayCloseModal({ isOpen, onClose, dayOperation }:
     { value: 0.50, label: "50 Dirhams", count: reconciliationData.cashCount_050 },
     { value: 0.25, label: "25 Dirhams", count: reconciliationData.cashCount_025 }
   ];
+
+  // Helper to get the correct denomination key
+  const getDenominationKey = (value: number): keyof ReconciliationData => {
+    if (value >= 1) {
+      return `cashCount_${value}` as keyof ReconciliationData;
+    } else {
+      // For decimal values: 0.50 -> 050, 0.25 -> 025
+      const decimalPart = Math.round(value * 100);
+      return `cashCount_0${decimalPart}` as keyof ReconciliationData;
+    }
+  };
 
   // Calculate totals from transaction data with split payment support
   function calculateTotals() {
@@ -754,7 +827,7 @@ export default function EnhancedDayCloseModal({ isOpen, onClose, dayOperation }:
   const closeDayMutation = useMutation({
     mutationFn: async () => {
       if (!storeId) {
-        throw new Error('Select a store before reopening a day');
+        throw new Error('Select a store before closing a day');
       }
 
       if (!dayOpForDate) {
@@ -793,10 +866,14 @@ export default function EnhancedDayCloseModal({ isOpen, onClose, dayOperation }:
         closedAt: new Date().toISOString()
       };
 
+      console.log('📥 Closing day operation:', dayOpForDate.id, 'for date:', dayOpForDate.date);
+      
+      const serializedPayload = serializeDayClosePayload(closingData);
+
       return apiRequest({
-        url: `/api/day-operations/${dayOpForDate.id}`,
+        url: `/api/day-operations/${dayOpForDate.id}/close`,
         method: "PATCH",
-        body: closingData
+        body: serializedPayload
       });
     },
     onSuccess: () => {
@@ -1378,58 +1455,261 @@ export default function EnhancedDayCloseModal({ isOpen, onClose, dayOperation }:
                   </CardContent>
                 </Card>
 
-                {/* Physical Cash Count Section */}
-                <Card>
+                {/* Physical Cash Count Section - Modern Calculator Style */}
+                <Card className="bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/30 dark:to-green-950/30">
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Banknote className="h-5 w-5" />
-                      Physical Cash Count
-                    </CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Calculator className="h-5 w-5 text-emerald-600" />
+                        Physical Cash Count
+                      </CardTitle>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setReconciliationData(prev => ({
+                            ...prev,
+                            cashCount_500: 0,
+                            cashCount_200: 0,
+                            cashCount_100: 0,
+                            cashCount_50: 0,
+                            cashCount_20: 0,
+                            cashCount_10: 0,
+                            cashCount_5: 0,
+                            cashCount_1: 0,
+                            cashCount_050: 0,
+                            cashCount_025: 0,
+                            cashMiscAmount: 0
+                          }));
+                          toast({
+                            title: "Cash Count Reset",
+                            description: "All denomination counts have been cleared."
+                          });
+                        }}
+                        className="text-xs gap-1"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Reset All
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Count each denomination and use +/- buttons for quick adjustments
+                    </p>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
-                      {cashDenominations.map((denom, index) => (
-                        <div key={index} className="space-y-2 p-3 border rounded-lg bg-gray-50">
-                          <Label className="text-sm font-medium text-center block">{denom.label}</Label>
-                          <div className="space-y-2">
-                            <Input
-                              type="number"
-                              min="0"
-                              value={denom.count}
-                              onChange={(e) => updateCashCount(`cashCount_${denom.value.toString().replace('.', '')}` as keyof ReconciliationData, parseInt(e.target.value) || 0)}
-                              className="w-full text-center font-medium"
-                              placeholder="0"
-                            />
-                            <div className="text-center">
-                              <span className="text-sm font-medium text-green-600">
-                                QR {(denom.value * denom.count).toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
+                    {/* Total Cash Display */}
+                    <div className="mb-6 p-6 border-2 border-emerald-500 rounded-xl bg-white dark:bg-slate-900 shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Total Physical Cash</p>
+                          <p className="text-4xl font-bold text-emerald-600 mt-1">QR {actualCashCount.toFixed(2)}</p>
                         </div>
-                      ))}
+                        <Calculator className="h-16 w-16 text-emerald-500 opacity-20" />
+                      </div>
+                    </div>
+
+                    {/* Cash Denominations Grid - Professional Layout */}
+                    <div className="space-y-4">
+                      {/* Large Bills */}
+                      <div>
+                        <h4 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                          <Banknote className="h-4 w-4" />
+                          Large Bills
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {cashDenominations.slice(0, 3).map((denom, index) => {
+                            const denomKey = getDenominationKey(denom.value);
+                            return (
+                              <div key={index} className="group relative p-4 border-2 rounded-xl bg-white dark:bg-slate-900 hover:border-emerald-500 transition-all">
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className="text-lg font-bold text-slate-900 dark:text-white">{denom.label}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {denom.count}x
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateCashCount(denomKey, Math.max(0, denom.count - 1))}
+                                    className="h-10 w-10 p-0 shrink-0"
+                                    disabled={denom.count === 0}
+                                  >
+                                    <Minus className="h-4 w-4" />
+                                  </Button>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={denom.count}
+                                    onChange={(e) => updateCashCount(denomKey, parseInt(e.target.value) || 0)}
+                                    className="h-10 text-center text-xl font-semibold"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateCashCount(denomKey, denom.count + 1)}
+                                    className="h-10 w-10 p-0 shrink-0"
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                                <div className="mt-3 text-center p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/50">
+                                  <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                                    = QR {(denom.value * denom.count).toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Medium Bills */}
+                      <div>
+                        <h4 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                          <Banknote className="h-4 w-4" />
+                          Medium Bills
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          {cashDenominations.slice(3, 7).map((denom, index) => {
+                            const denomKey = getDenominationKey(denom.value);
+                            return (
+                              <div key={index} className="group relative p-3 border-2 rounded-xl bg-white dark:bg-slate-900 hover:border-blue-500 transition-all">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-base font-bold text-slate-900 dark:text-white">{denom.label}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {denom.count}x
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateCashCount(denomKey, Math.max(0, denom.count - 1))}
+                                    className="h-9 w-9 p-0 shrink-0"
+                                    disabled={denom.count === 0}
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={denom.count}
+                                    onChange={(e) => updateCashCount(denomKey, parseInt(e.target.value) || 0)}
+                                    className="h-9 text-center text-lg font-semibold"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateCashCount(denomKey, denom.count + 1)}
+                                    className="h-9 w-9 p-0 shrink-0"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                                <div className="mt-2 text-center p-2 rounded-lg bg-blue-50 dark:bg-blue-950/50">
+                                  <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">
+                                    = QR {(denom.value * denom.count).toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Coins */}
+                      <div>
+                        <h4 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                          <Coins className="h-4 w-4" />
+                          Coins (Dirhams)
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {cashDenominations.slice(7).map((denom, index) => {
+                            const denomKey = getDenominationKey(denom.value);
+                            return (
+                              <div key={index} className="group relative p-3 border-2 rounded-xl bg-white dark:bg-slate-900 hover:border-amber-500 transition-all">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-sm font-bold text-slate-900 dark:text-white">{denom.label}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {denom.count}x
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateCashCount(denomKey, Math.max(0, denom.count - 1))}
+                                    className="h-9 w-9 p-0 shrink-0"
+                                    disabled={denom.count === 0}
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={denom.count}
+                                    onChange={(e) => updateCashCount(denomKey, parseInt(e.target.value) || 0)}
+                                    className="h-9 text-center text-base font-semibold"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateCashCount(denomKey, denom.count + 1)}
+                                    className="h-9 w-9 p-0 shrink-0"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                                <div className="mt-2 text-center p-2 rounded-lg bg-amber-50 dark:bg-amber-950/50">
+                                  <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                                    = QR {(denom.value * denom.count).toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                     
-                    <Separator className="my-4" />
+                    <Separator className="my-6" />
                     
+                    {/* Miscellaneous Cash */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Miscellaneous Cash Amount</Label>
+                        <Label className="flex items-center gap-2">
+                          <Wallet className="h-4 w-4" />
+                          Miscellaneous Cash Amount
+                        </Label>
                         <Input
                           type="number"
                           step="0.01"
                           min="0"
                           value={reconciliationData.cashMiscAmount}
                           onChange={(e) => updateMovementAmount('cashMiscAmount', parseFloat(e.target.value) || 0)}
-                          placeholder="Additional cash amount"
-                          className="text-center font-medium"
+                          placeholder="Any additional cash not counted above"
+                          className="text-center font-medium h-12"
                         />
+                        <p className="text-xs text-muted-foreground">Use this for loose change or damaged notes</p>
                       </div>
-                      <div className="flex items-center justify-center lg:justify-end">
-                        <div className="text-center lg:text-right p-4 border rounded-lg bg-green-50 dark:bg-green-950/30">
-                          <p className="text-sm font-medium">Total Cash Count</p>
-                          <p className="text-xl sm:text-2xl font-bold text-green-600">QR {actualCashCount.toFixed(2)}</p>
-                        </div>
+                      <div className="flex items-center justify-center">
+                        <Alert className="bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500">
+                          <CheckCircle className="h-4 w-4 text-emerald-600" />
+                          <div className="ml-2">
+                            <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">Cash Count Complete</p>
+                            <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
+                              Proceed to review the variance and close the day
+                            </p>
+                          </div>
+                        </Alert>
                       </div>
                     </div>
                   </CardContent>

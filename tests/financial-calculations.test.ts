@@ -636,9 +636,9 @@ function calculateVAT(
     rateSource = "store-default";
   }
 
-  // Priority 4: System default (5%)
+  // Priority 4: System default (0%)
   if (applicableRate === null) {
-    applicableRate = 5.0;
+    applicableRate = 0;
     rateSource = "system-default";
   }
 
@@ -849,7 +849,7 @@ describe('VAT Calculations', () => {
       expect(result.applicableRate).toBe('store-default');
     });
 
-    it('should use system default (5%) when no other rate available', () => {
+    it('should use system default (0%) when no other rate available', () => {
       const result = calculateVAT(
         100.00,
         null,
@@ -858,9 +858,9 @@ describe('VAT Calculations', () => {
         null,
         []
       );
-      expect(result.vatRate).toBe(5.0);
-      expect(result.vatAmount).toBe(5.00);
-      expect(result.totalAmount).toBe(105.00);
+      expect(result.vatRate).toBe(0);
+      expect(result.vatAmount).toBe(0.00);
+      expect(result.totalAmount).toBe(100.00);
       expect(result.applicableRate).toBe('system-default');
     });
 

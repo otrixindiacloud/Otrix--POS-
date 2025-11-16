@@ -557,10 +557,10 @@ export default function POS() {
             </div>
           )}
           
-          <div className="relative flex flex-1 gap-2 bg-background p-2 overflow-hidden justify-center">
-            <div className="flex flex-[3] flex-col gap-2 max-w-[1800px] h-full">
-              {/* Product Search Bar - Expanded to fill available space */}
-              <div className="flex-1 overflow-hidden rounded-lg border shadow-sm bg-card min-h-0">
+          <div className="relative flex flex-1 gap-2 bg-background p-2 overflow-auto justify-center">
+            <div className="flex flex-[3] flex-col gap-2 max-w-[1800px]">
+              {/* Product Search Bar at the top */}
+              <div className="overflow-hidden rounded-lg border shadow-sm bg-card flex-shrink-0">
                 <ProductSearchBar
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}

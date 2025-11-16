@@ -42,7 +42,7 @@ export default function CartTable() {
     .filter(item => item.productId !== null)
     .map(item => item.productId!);
   
-  const { data: products = [] } = useQuery({
+  const { data: products = [] } = useQuery<any[]>({
     queryKey: ["/api/products"],
     enabled: productIds.length > 0,
   });
@@ -57,6 +57,30 @@ export default function CartTable() {
 
   // Track last adjustment to prevent infinite loops
   const lastAdjustmentRef = useRef<string>("");
+
+  // Dynamically cap visible rows to 5 and enable scrolling for more
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const [maxHeightPx, setMaxHeightPx] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const recalc = () => {
+      const table = tableRef.current;
+      if (!table) return;
+      const thead = table.querySelector("thead") as HTMLElement | null;
+      const firstBodyRow = table.querySelector("tbody tr") as HTMLElement | null;
+      if (!thead || !firstBodyRow) return;
+
+      const headerH = thead.getBoundingClientRect().height || 0;
+      const rowH = firstBodyRow.getBoundingClientRect().height || 0;
+      if (!rowH) return;
+      const rowsToShow = Math.min(5, Math.max(5, filteredCartItems.length));
+      setMaxHeightPx(Math.ceil(headerH + rowH * rowsToShow + 2));
+    };
+
+    recalc();
+    window.addEventListener("resize", recalc);
+    return () => window.removeEventListener("resize", recalc);
+  }, [filteredCartItems.length]);
 
   // Validate and adjust quantities that exceed available stock
   useEffect(() => {
@@ -74,10 +98,10 @@ export default function CartTable() {
     let hasAdjustments = false;
     cartItems.forEach(item => {
       if (item.productId !== null) {
-        const currentStock = stockMap.get(item.productId);
+        const currentStock = stockMap.get(item.productId!);
         if (currentStock !== undefined && item.quantity > currentStock) {
           // Quantity exceeds available stock, adjust it
-          updateCartItemQuantity(item.productId, item.sku, currentStock);
+          updateCartItemQuantity(item.productId!, item.sku, currentStock!);
           toast({
             title: "Quantity Adjusted",
             description: `${item.name} quantity adjusted to ${currentStock} (available stock: ${currentStock})`,
@@ -182,59 +206,40 @@ export default function CartTable() {
   };
 
   const getItemAmount = (item: any) => {
+    // Always show the base total (price × quantity) without discount
+    // Discount will only be reflected in the final total calculation
     const baseTotal = parseFloat(item.price) * item.quantity;
-    
-    // If currently editing discount, show real-time preview
-    const discountKey = `${item.productId || 'null'}-${item.sku}`;
-    if (editingDiscount[discountKey] !== undefined) {
-      const discountValue = editingDiscount[discountKey];
-      if (discountValue !== "" && !isNaN(parseFloat(discountValue))) {
-        const discount = parseFloat(discountValue);
-        const discountType = discount > 100 ? 'fixed' : 'percentage';
-        
-        if (discountType === 'percentage') {
-          const discountAmount = baseTotal * (discount / 100);
-          return baseTotal - discountAmount;
-        } else {
-          return Math.max(0, baseTotal - discount);
-        }
-      }
-    }
-    
-    // Otherwise use the stored total (which includes discount if applied)
-    if (item.total) {
-      return parseFloat(item.total);
-    }
-    
-    // Fallback calculation
-    const discount = item.discountAmount ? parseFloat(item.discountAmount) : 0;
-    if (item.discountType === 'percentage') {
-      const discountAmount = baseTotal * (discount / 100);
-      return baseTotal - discountAmount;
-    } else {
-      return Math.max(0, baseTotal - discount);
-    }
+    return baseTotal;
   };
 
   return (
-    <div className="w-full overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead className="bg-blue-700 text-white">
+    <div className="w-full overflow-hidden border rounded-lg" style={{ minHeight: '250px' }}>
+      <div className="overflow-y-auto" style={{ maxHeight: maxHeightPx ? `${maxHeightPx}px` : '300px', minHeight: '250px' }}>
+        <table ref={tableRef} className="w-full text-sm border-collapse table-fixed">
+          <colgroup>
+            <col className="w-10" />
+            <col className="min-w-[150px]" />
+            <col className="w-16" />
+            <col className="w-20" />
+            <col className="w-32" />
+            <col className="w-24" />
+            <col className="w-12" />
+          </colgroup>
+          <thead className="bg-blue-700 text-white sticky top-0 z-10">
             <tr>
-              <th className="py-2 px-3 text-center font-semibold text-xs w-10">S.NO</th>
-              <th className="py-2 px-3 text-left font-semibold text-xs min-w-[150px]">Item Name</th>
-              <th className="py-2 px-3 text-center font-semibold text-xs w-16">Unit</th>
-              <th className="py-2 px-3 text-center font-semibold text-xs w-20">Rate</th>
-              <th className="py-2 px-3 text-center font-semibold text-xs w-28">Qty.</th>
-              <th className="py-2 px-3 text-center font-semibold text-xs w-24">Amount</th>
-              <th className="py-2 px-3 text-center font-semibold text-xs w-12"></th>
+              <th className="py-2 px-5 text-center font-semibold text-xs">S.NO</th>
+              <th className="py-2 px-5 text-left font-semibold text-xs">Item Name</th>
+              <th className="py-2 px-5 text-center font-semibold text-xs">Unit</th>
+              <th className="py-2 px-5 text-center font-semibold text-xs">Rate</th>
+              <th className="py-2 px-5 text-center font-semibold text-xs">Qty.</th>
+              <th className="py-2 px-5 text-center font-semibold text-xs">Amount</th>
+              <th className="py-2 px-5 text-center font-semibold text-xs"></th>
             </tr>
           </thead>
           <tbody>
             {filteredCartItems.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-4 px-3 text-center text-gray-500 text-xs">
+                <td colSpan={7} className="py-4 px-5 text-center text-gray-500 text-xs">
                   No items in cart
                 </td>
               </tr>
@@ -252,8 +257,8 @@ export default function CartTable() {
                     key={`${item.productId || 'null'}-${item.sku}-${index}`}
                     className={`border-b border-slate-200 hover:bg-slate-50 transition-colors ${isOutOfStock ? 'bg-red-50' : ''}`}
                   >
-                    <td className="py-2.5 px-3 text-center text-black font-medium text-xs">{index + 1}</td>
-                    <td className="py-2.5 px-3">
+                    <td className="py-1.5 px-5 w-10 text-center text-black font-medium text-xs">{index + 1}</td>
+                    <td className="py-1.5 px-5">
                       <div className="font-medium text-black text-xs uppercase truncate max-w-[200px]" title={item.name}>
                         {item.name}
                       </div>
@@ -270,41 +275,41 @@ export default function CartTable() {
                         </div>
                       )}
                     </td>
-                    <td className="py-2.5 px-3 text-center text-black font-medium text-xs">PC</td>
-                    <td className="py-2.5 px-3 text-center text-black font-medium text-xs">
+                    <td className="py-1.5 px-5 w-16 text-center text-black font-medium text-xs">PC</td>
+                    <td className="py-1.5 px-5 w-20 text-center text-black font-medium text-xs">
                       {parseFloat(item.price).toFixed(1)}
                     </td>
-                    <td className="py-2.5 px-3 text-center">
+                    <td className="py-1.5 px-5 w-32 text-center">
                       <div className="flex items-center justify-center gap-1">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="w-7 h-7 p-0 hover:bg-blue-100 border-blue-300"
+                          className="w-8 h-8 p-0 hover:bg-blue-100 border-blue-300"
                           onClick={() => handleQuantityDecrease(item.productId ?? null, item.sku)}
                           disabled={(item.quantity || 1) <= 1}
                           title="Decrease quantity"
                         >
-                          <Minus className="w-3 h-3 text-blue-600" />
+                          <Minus className="w-4 h-4 text-blue-600" />
                         </Button>
-                        <span className={`w-10 text-center text-xs font-medium ${isOutOfStock ? 'text-red-600' : 'text-black'}`}>
+                        <span className={`w-12 text-center text-xs font-medium ${isOutOfStock ? 'text-red-600' : 'text-black'}`}>
                           {item.quantity || 1}
                         </span>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="w-7 h-7 p-0 hover:bg-blue-100 border-blue-300"
+                          className="w-8 h-8 p-0 hover:bg-blue-100 border-blue-300"
                           onClick={() => handleQuantityIncrease(item.productId ?? null, item.sku)}
                           disabled={currentStock !== undefined && item.quantity >= currentStock}
                           title={currentStock !== undefined && item.quantity >= currentStock ? "Out of stock" : "Increase quantity"}
                         >
-                          <Plus className="w-3 h-3 text-blue-600" />
+                          <Plus className="w-4 h-4 text-blue-600" />
                         </Button>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 text-center text-black font-medium text-xs">
+                    <td className="py-1.5 px-5 w-24 text-center text-black font-medium text-xs">
                       {getItemAmount(item).toFixed(1)}
                     </td>
-                    <td className="py-2.5 px-3 text-center">
+                    <td className="py-1.5 px-5 text-center">
                       <Button
                         variant="ghost"
                         size="sm"

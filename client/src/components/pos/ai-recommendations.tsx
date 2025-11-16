@@ -115,7 +115,7 @@ export default function AIRecommendations() {
                           {rec.product.name}
                         </h4>
                         <p className="text-xs text-slate-600">
-                          ${rec.product.price.toFixed(2)}
+                          ${parseFloat(rec.product.price).toFixed(2)}
                         </p>
                         <div className="flex items-center space-x-2 mt-1">
                           <Badge variant="secondary" className="text-xs">

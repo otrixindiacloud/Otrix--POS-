@@ -26,7 +26,7 @@ export default function HoldModal({ isOpen, onClose }: HoldModalProps) {
     currentTransactionNumber, 
     clearCart,
     getCartSubtotal,
-    getCartTax,
+    getCartVAT,
     getCartTotal 
   } = usePOSStore();
   const { toast } = useToast();
@@ -58,7 +58,7 @@ export default function HoldModal({ isOpen, onClose }: HoldModalProps) {
         } : null,
         items: cartItems,
         subtotal: getCartSubtotal(),
-        tax: getCartTax(),
+        tax: getCartVAT(),
         total: getCartTotal(),
         timestamp: new Date().toISOString(),
       };
