@@ -64,12 +64,6 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
     enabled: isOpen,
   });
 
-  // Fetch suppliers list for dropdown
-  const { data: suppliers = [] } = useQuery<Supplier[]>({
-    queryKey: ['/api/suppliers'],
-    enabled: isOpen,
-  });
-
   // Ensure payments is always an array
   const payments = Array.isArray(paymentsData) ? paymentsData : [];
 
@@ -91,12 +85,8 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
         title: "Success",
         description: "Invoice updated successfully",
       });
-      // Invalidate all related queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['/api/supplier-invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/suppliers'] });
       setIsEditing(false);
-      // Close and reopen modal to show fresh data
-      onClose();
     },
     onError: (error: any) => {
       console.error("Invoice update error:", error);
@@ -167,10 +157,9 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
 
   const handleSave = () => {
     try {
-      // Send all editable fields including supplierId
+      // Only send fields that can be updated, excluding id, supplierId, createdAt
       const updatePayload: any = {
         invoiceNumber: editedInvoice.invoiceNumber,
-        supplierId: editedInvoice.supplierId,
         invoiceDate: new Date(editedInvoice.invoiceDate).toISOString(),
         dueDate: editedInvoice.dueDate ? new Date(editedInvoice.dueDate).toISOString() : null,
         subtotal: String(editedInvoice.subtotal),
@@ -328,25 +317,7 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
                   </div>
                   <div>
                     <Label className="text-xs font-medium text-slate-600 uppercase mb-2 block">Supplier</Label>
-                    {isEditing ? (
-                      <Select
-                        value={editedInvoice.supplierId?.toString() || ""}
-                        onValueChange={(value) => setEditedInvoice({ ...editedInvoice, supplierId: parseInt(value) })}
-                      >
-                        <SelectTrigger className="border-slate-300">
-                          <SelectValue placeholder="Select supplier" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {suppliers.map((sup) => (
-                            <SelectItem key={sup.id} value={sup.id.toString()}>
-                              {sup.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="text-sm font-semibold text-slate-900">{supplier?.name || 'Unknown Supplier'}</p>
-                    )}
+                    <p className="text-sm font-semibold text-slate-900">{supplier?.name || 'Unknown Supplier'}</p>
                   </div>
                 </div>
 
@@ -784,7 +755,7 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
           {/* Right Column - Financial Summary */}
           <div className="space-y-6">
             <Card className="border-slate-200 shadow-sm bg-white">
-              <CardHeader className="border-b border-slate-100 bg-gradient-to-br from-blue-50 to-indigo-50 pb-3">
+              <CardHeader className="border-b border-slate-100 bg-gradient-to-br from-blue-50 to-indigo-50">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
                   <div className="p-1.5 bg-blue-100 rounded">
                     <Coins className="w-4 h-4 text-blue-600" />
@@ -836,7 +807,7 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
 
             {/* Timeline */}
             <Card className="border-slate-200 shadow-sm bg-white">
-              <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-3">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
                   <div className="p-1.5 bg-amber-100 rounded">
                     <Calendar className="w-4 h-4 text-amber-600" />
@@ -844,7 +815,7 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
                   Timeline
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-4 space-y-1">
+              <CardContent className="pt-6 space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-1.5"></div>
                   <div className="flex-1 min-w-0">
@@ -855,7 +826,7 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
                 </div>
                 {invoice.processedAt && (
                   <>
-                    <div className="ml-1 h-3 w-px bg-slate-200"></div>
+                    <div className="ml-1 h-6 w-px bg-slate-200"></div>
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full mt-1.5"></div>
                       <div className="flex-1 min-w-0">

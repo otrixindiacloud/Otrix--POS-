@@ -522,52 +522,52 @@ export default function ProductSearchBar({
           .header { 
             text-align: center; 
             border-bottom: 2px dashed #000; 
-            padding-bottom: 15px; 
-            margin-bottom: 15px; 
+            padding-bottom: 8px; 
+            margin-bottom: 8px; 
           }
           .header h1 { 
-            margin: 0 0 5px 0; 
-            font-size: 20px; 
+            margin: 0 0 3px 0; 
+            font-size: 16px; 
             font-weight: bold;
             letter-spacing: 2px;
           }
           .header .business-info { 
-            margin: 5px 0; 
-            font-size: 10px;
+            margin: 2px 0; 
+            font-size: 8px;
             font-weight: normal;
           }
           .header .receipt-title { 
-            margin: 8px 0 0 0; 
-            font-size: 14px;
+            margin: 4px 0 0 0; 
+            font-size: 11px;
             font-weight: bold;
             text-decoration: underline;
           }
           .transaction-info { 
-            margin-bottom: 15px; 
+            margin-bottom: 8px; 
           }
           .info-section {
-            margin-bottom: 10px;
-            padding-bottom: 5px;
+            margin-bottom: 5px;
+            padding-bottom: 3px;
             border-bottom: 1px dotted #666;
           }
           .items-section { 
             border-bottom: 2px dashed #000; 
-            padding-bottom: 15px; 
-            margin-bottom: 15px; 
+            padding-bottom: 8px; 
+            margin-bottom: 8px; 
           }
           .items-header {
             font-weight: bold; 
-            margin-bottom: 8px; 
-            font-size: 11px; 
+            margin-bottom: 4px; 
+            font-size: 9px; 
             text-align: center;
             background: #f0f0f0;
-            padding: 3px;
+            padding: 2px;
             border: 1px solid #000;
           }
           .item { 
-            margin-bottom: 8px; 
+            margin-bottom: 4px; 
             border-bottom: 1px dotted #ccc;
-            padding-bottom: 5px;
+            padding-bottom: 3px;
           }
           .item:last-child {
             border-bottom: none;
@@ -576,72 +576,72 @@ export default function ProductSearchBar({
             display: flex;
             justify-content: space-between;
             font-weight: bold;
-            font-size: 11px;
+            font-size: 9px;
             margin-bottom: 2px;
           }
           .item-details {
-            font-size: 9px;
+            font-size: 7px;
             color: #666;
-            margin-bottom: 3px;
+            margin-bottom: 1px;
           }
           .item-calculation {
             display: flex;
             justify-content: space-between;
-            font-size: 10px;
+            font-size: 8px;
             align-items: center;
           }
           .item-total {
             font-weight: bold;
-            font-size: 11px;
+            font-size: 9px;
           }
           .totals-section { 
-            margin-bottom: 15px;
+            margin-bottom: 8px;
             background: #f9f9f9;
-            padding: 10px;
+            padding: 6px;
             border: 1px solid #ddd;
           }
           .total-line { 
             display: flex; 
             justify-content: space-between; 
-            margin-bottom: 4px; 
-            font-size: 11px;
-            padding: 1px 0;
+            margin-bottom: 2px; 
+            font-size: 9px;
+            padding: 0;
           }
           .total-line.final { 
             font-weight: bold; 
             border-top: 2px solid #000; 
             border-bottom: 1px solid #000;
-            padding: 8px 0 5px 0; 
-            font-size: 14px;
+            padding: 5px 0 3px 0; 
+            font-size: 11px;
             background: #000;
             color: #fff;
-            margin-top: 8px;
+            margin-top: 4px;
           }
           .payment-section {
-            margin-bottom: 15px;
-            padding: 8px;
+            margin-bottom: 8px;
+            padding: 5px;
             border: 1px solid #ccc;
             background: #f5f5f5;
           }
           .footer { 
             text-align: center; 
-            font-size: 9px; 
-            margin-top: 15px; 
+            font-size: 7px; 
+            margin-top: 8px; 
             border-top: 2px dashed #000;
-            padding-top: 15px;
+            padding-top: 8px;
           }
           .footer .thank-you {
-            font-size: 12px;
+            font-size: 10px;
             font-weight: bold;
-            margin: 10px 0;
+            margin: 5px 0;
             text-transform: uppercase;
             letter-spacing: 1px;
           }
           .barcode {
             text-align: center;
             font-family: 'Libre Barcode 39', monospace;
-            font-size: 24px;
-            margin: 10px 0;
+            font-size: 20px;
+            margin: 5px 0;
             letter-spacing: 2px;
           }
           @media print {
@@ -812,11 +812,11 @@ export default function ProductSearchBar({
           
           <div class="footer">
             <div class="thank-you">Thank You for Your Business!</div>
-            <p>Please keep this receipt for your records</p>
-            <p>Visit us again soon</p>
-            <hr style="border: 1px dashed #666; margin: 10px 0;">
-            <p>Receipt Generated: ${currentDate}</p>
-            <p style="font-size: 8px;">Powered by POS System v2.0</p>
+            <p style="margin: 2px 0;">Please keep this receipt for your records</p>
+            <p style="margin: 2px 0;">Visit us again soon</p>
+            <hr style="border: 1px dashed #666; margin: 4px 0;">
+            <p style="margin: 2px 0;">Receipt Generated: ${currentDate}</p>
+            <p style="font-size: 6px; margin: 2px 0;">Powered by POS System v2.0</p>
           </div>
         </div>
       </body>

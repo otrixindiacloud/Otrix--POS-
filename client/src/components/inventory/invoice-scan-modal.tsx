@@ -18,7 +18,8 @@ import {
   Loader2,
   Plus,
   Edit,
-  Save
+  Save,
+  Scan
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -139,10 +140,16 @@ export default function InvoiceScanModal({ isOpen, onClose, type }: InvoiceScanM
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       handleClose();
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      let errorMessage = "Failed to save the invoice. Please try again.";
+      
+      if (error.message?.includes("Invoice number already exists") || error.message?.includes("already exists")) {
+        errorMessage = "Invoice already added. This invoice number already exists in the system.";
+      }
+      
       toast({
         title: "Save Failed",
-        description: "Failed to save the invoice. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -212,10 +219,29 @@ export default function InvoiceScanModal({ isOpen, onClose, type }: InvoiceScanM
     const updatedItems = [...editingItems];
     updatedItems[index] = { ...updatedItems[index], [field]: value };
     setEditingItems(updatedItems);
+    
+    // Recalculate totals from items
+    if (extractedData) {
+      const calculatedSubtotal = updatedItems.reduce((sum: number, item: any) => sum + (item.totalPrice || 0), 0);
+      const calculatedTax = calculatedSubtotal * 0; // 0% VAT
+      const calculatedTotal = calculatedSubtotal + calculatedTax;
+      
+      setExtractedData({
+        ...extractedData,
+        subtotal: Number(calculatedSubtotal.toFixed(2)),
+        tax: Number(calculatedTax.toFixed(2)),
+        total: Number(calculatedTotal.toFixed(2)),
+      });
+    }
   };
 
   const handleConfirmInvoice = async () => {
     if (!extractedData || !selectedSupplier) return;
+
+    // Calculate totals from items to ensure consistency
+    const calculatedSubtotal = editingItems.reduce((sum: number, item: any) => sum + (item.totalPrice || 0), 0);
+    const calculatedTax = calculatedSubtotal * 0; // 0% VAT
+    const calculatedTotal = calculatedSubtotal + calculatedTax;
 
     // Prepare invoice data
     const invoiceData = {
@@ -223,9 +249,9 @@ export default function InvoiceScanModal({ isOpen, onClose, type }: InvoiceScanM
       invoiceNumber: extractedData.invoiceNumber,
       invoiceDate: new Date(extractedData.invoiceDate).toISOString(),
       dueDate: extractedData.dueDate ? new Date(extractedData.dueDate).toISOString() : null,
-      subtotal: extractedData.subtotal.toString(),
-      tax: extractedData.tax.toString(),
-      total: extractedData.total.toString(),
+      subtotal: calculatedSubtotal.toFixed(2),
+      tax: calculatedTax.toFixed(2),
+      total: calculatedTotal.toFixed(2),
       status: 'pending',
       type: type,
       invoiceImageUrl: invoiceImageUrl, // Include the scanned image URL
@@ -533,8 +559,8 @@ export default function InvoiceScanModal({ isOpen, onClose, type }: InvoiceScanM
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="text-blue-600">
-                              <Plus className="w-3 h-3 mr-1" />
-                              New Product
+                              <Scan className="w-3 h-3 mr-1" />
+                              Scanned Item
                             </Badge>
                           )}
                         </div>
@@ -562,8 +588,12 @@ export default function InvoiceScanModal({ isOpen, onClose, type }: InvoiceScanM
                             <Input 
                               type="number"
                               step="0.01"
-                              value={item.unitPrice}
-                              onChange={(e) => updateItemValue(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                              value={Number(item.unitPrice).toFixed(2)}
+                              onBlur={(e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                updateItemValue(index, 'unitPrice', value);
+                              }}
+                              onChange={(e) => updateItemValue(index, 'unitPrice', e.target.value)}
                               className="text-sm"
                             />
                           </div>

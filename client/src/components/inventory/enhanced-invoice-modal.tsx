@@ -186,18 +186,8 @@ export default function EnhancedInvoiceModal({ isOpen, onClose, type, invoice }:
       let errorMessage = `Failed to create ${type}`;
       
       if (error.message) {
-        if (error.message.includes("Invoice number already exists")) {
-          // Generate a new unique invoice number and suggest retry
-          const timestamp = Date.now();
-          const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-          const newNumber = `${type.toUpperCase()}-${timestamp}-${random}`;
-          
-          setFormData(prev => ({
-            ...prev,
-            invoiceNumber: newNumber
-          }));
-          
-          errorMessage = `Invoice number already exists. Updated to: ${newNumber}. Please try again.`;
+        if (error.message.includes("Invoice number already exists") || error.message.includes("already exists")) {
+          errorMessage = "Invoice already added. This invoice number already exists in the system.";
         } else if (error.message.includes("Invalid supplier")) {
           errorMessage = "Please select a valid supplier.";
         } else if (error.message.includes("At least one invoice item is required")) {

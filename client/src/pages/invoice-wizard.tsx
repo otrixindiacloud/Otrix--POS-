@@ -57,6 +57,9 @@ interface ExtractedData {
   items: {
     productName: string;
     quantity: number;
+    uom?: string;
+    crtQty?: number;
+    pcsQty?: number;
     unitPrice: number;
     totalPrice: number;
     sku?: string;
@@ -173,21 +176,15 @@ export default function InvoiceWizardPage() {
       
       // Auto-populate header details from extracted data
       if (data.extractedData) {
-        setHeaderDetails({
-          invoiceNumber: data.extractedData.invoiceNumber || `${invoiceType.toUpperCase()}-${Date.now()}`,
-          invoiceDate: data.extractedData.invoiceDate || new Date().toISOString().split('T')[0],
-          dueDate: data.extractedData.dueDate || '',
-          subtotal: data.extractedData.subtotal || 0,
-          tax: data.extractedData.tax || 0,
-          total: data.extractedData.total || 0,
-        });
-        
         // Auto-populate items with better validation
         const items = data.extractedData.items?.map((item: any, index: number) => ({
           ...item,
           srNo: index + 1,
           productName: item.productName || '',
           quantity: Math.max(1, item.quantity || 1),
+          uom: item.uom || null,
+          crtQty: item.crtQty || null,
+          pcsQty: item.pcsQty || null,
           unitPrice: Math.max(0, item.unitPrice || 0),
           totalPrice: Math.max(0, item.totalPrice || item.quantity * item.unitPrice || 0),
           sku: item.sku || '',
@@ -195,6 +192,20 @@ export default function InvoiceWizardPage() {
         })) || [];
         
         setEditingItems(items);
+        
+        // Calculate totals from items to ensure consistency
+        const calculatedSubtotal = items.reduce((sum: number, item: any) => sum + (item.totalPrice || 0), 0);
+        const calculatedTax = calculatedSubtotal * 0; // 0% VAT
+        const calculatedTotal = calculatedSubtotal + calculatedTax;
+        
+        setHeaderDetails({
+          invoiceNumber: data.extractedData.invoiceNumber || `${invoiceType.toUpperCase()}-${Date.now()}`,
+          invoiceDate: data.extractedData.invoiceDate || new Date().toISOString().split('T')[0],
+          dueDate: data.extractedData.dueDate || '',
+          subtotal: Number(calculatedSubtotal.toFixed(2)),
+          tax: Number(calculatedTax.toFixed(2)),
+          total: Number(calculatedTotal.toFixed(2)),
+        });
         
         // Try to find supplier match with better fuzzy matching
         const extractedSupplierName = data.extractedData.supplierName?.toLowerCase();
@@ -284,9 +295,9 @@ export default function InvoiceWizardPage() {
       console.error('Invoice creation error:', error);
       
       let errorMessage = "Failed to create invoice";
-      if (error.message.includes("Invoice number already exists")) {
-        errorMessage = "Invoice number already exists. Please use a different number.";
-      } else if (error.message.includes("supplier")) {
+      if (error.message?.includes("Invoice number already exists") || error.message?.includes("already exists")) {
+        errorMessage = "Invoice already added. This invoice number already exists in the system.";
+      } else if (error.message?.includes("supplier")) {
         errorMessage = "Please select a valid supplier.";
       } else if (error.message) {
         errorMessage = error.message;
@@ -468,6 +479,9 @@ export default function InvoiceWizardPage() {
       srNo: editingItems.length + 1,
       productName: '',
       quantity: 1,
+      uom: null,
+      crtQty: null,
+      pcsQty: null,
       unitPrice: 0,
       totalPrice: 0,
       sku: '',
@@ -1160,15 +1174,32 @@ export default function InvoiceWizardPage() {
                             )}
                             {match?.action !== 'match' && (
                               <Badge variant="outline" className="text-blue-600">
-                                <Plus className="w-3 h-3 mr-1" />
-                                New Product
+                                <Scan className="w-3 h-3 mr-1" />
+                                Scanned Item
+                              </Badge>
+                            )}
+                            {item.uom && (
+                              <Badge variant="outline" className="text-purple-600 bg-purple-50">
+                                {item.uom}
+                                {item.crtQty && item.pcsQty && (
+                                  <span className="ml-1 text-xs">({item.crtQty}/{item.pcsQty})</span>
+                                )}
                               </Badge>
                             )}
                           </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeItem(index)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          >
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            Remove
+                          </Button>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                          <div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                          <div className="sm:col-span-2 lg:col-span-1">
                             <Label className="text-xs sm:text-sm">Product Name</Label>
                             <Input 
                               value={item.productName}
@@ -1178,7 +1209,14 @@ export default function InvoiceWizardPage() {
                             />
                           </div>
                           <div>
-                            <Label className="text-xs sm:text-sm">Quantity</Label>
+                            <Label className="text-xs sm:text-sm">
+                              Quantity
+                              {item.uom && (
+                                <span className="ml-1 text-xs font-normal text-purple-600">
+                                  ({item.uom})
+                                </span>
+                              )}
+                            </Label>
                             <Input 
                               type="number"
                               value={item.quantity}
@@ -1189,24 +1227,64 @@ export default function InvoiceWizardPage() {
                             />
                           </div>
                           <div>
+                            <Label className="text-xs sm:text-sm">
+                              CRT/PCS
+                              <span className="ml-1 text-xs font-normal text-gray-500">(packing info)</span>
+                              {item.crtQty && item.pcsQty && (
+                                <span className="ml-1 text-xs font-normal text-green-600">
+                                  ✓ Extracted
+                                </span>
+                              )}
+                            </Label>
+                            <Input 
+                              type="text"
+                              value={item.crtQty && item.pcsQty ? `${item.crtQty}/${item.pcsQty}` : ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const match = value.match(/^(\d+)\/(\d+)$/);
+                                if (match) {
+                                  const crtQty = parseInt(match[1]);
+                                  const pcsQty = parseInt(match[2]);
+                                  updateItemValue(index, 'crtQty', crtQty);
+                                  updateItemValue(index, 'pcsQty', pcsQty);
+                                  // Don't auto-calculate quantity - CRT/PCS is just packing info
+                                  // updateItemValue(index, 'quantity', crtQty * pcsQty);
+                                } else if (value === '') {
+                                  updateItemValue(index, 'crtQty', null);
+                                  updateItemValue(index, 'pcsQty', null);
+                                }
+                              }}
+                              className={cn("text-sm font-mono", item.crtQty && item.pcsQty && "border-green-300 bg-green-50")}
+                              placeholder="2/24 (packing info)"
+                            />
+                            {item.crtQty && item.pcsQty && (
+                              <p className="text-[10px] text-gray-500 mt-1">
+                                📦 {item.crtQty} carton(s) × {item.pcsQty} pieces = {item.crtQty * item.pcsQty} total pcs (info only)
+                              </p>
+                            )}
+                          </div>
+                          <div>
                             <Label className="text-xs sm:text-sm">Unit Price (QR)</Label>
                             <Input 
-                              type="number"
-                              step="0.01"
-                              value={item.unitPrice}
-                              onChange={(e) => updateItemValue(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                              type="text"
+                              inputMode="decimal"
+                              value={Number(item.unitPrice).toFixed(2)}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                // Allow typing decimal values
+                                if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+                                  updateItemValue(index, 'unitPrice', value === '' ? 0 : parseFloat(value) || 0);
+                                }
+                              }}
                               className="text-sm"
                               placeholder="0.00"
-                              min="0"
                             />
                           </div>
                           <div>
                             <Label className="text-xs sm:text-sm">Total Price (QR)</Label>
                             <Input 
-                              type="number"
-                              step="0.01"
-                              value={item.totalPrice}
-                              onChange={(e) => updateItemValue(index, 'totalPrice', parseFloat(e.target.value) || 0)}
+                              type="text"
+                              value={Number(item.totalPrice).toFixed(2)}
                               className="text-sm bg-gray-50"
                               placeholder="0.00"
                               readOnly
@@ -1214,22 +1292,53 @@ export default function InvoiceWizardPage() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
                           <div>
-                            <Label className="text-xs sm:text-sm">SKU</Label>
+                            <Label className="text-xs sm:text-sm">
+                              UOM
+                              {item.uom && (
+                                <span className="ml-1 text-xs font-normal text-green-600">
+                                  ✓ Extracted
+                                </span>
+                              )}
+                            </Label>
+                            <Input 
+                              value={item.uom || ''}
+                              onChange={(e) => updateItemValue(index, 'uom', e.target.value.toUpperCase())}
+                              className={cn("text-sm", item.uom && "border-green-300 bg-green-50")}
+                              placeholder="CRT, PCS, BOX, etc."
+                              maxLength={10}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs sm:text-sm">
+                              SKU
+                              {item.sku && (
+                                <span className="ml-1 text-xs font-normal text-green-600">
+                                  ✓ Extracted
+                                </span>
+                              )}
+                            </Label>
                             <Input 
                               value={item.sku || ''}
                               onChange={(e) => updateItemValue(index, 'sku', e.target.value)}
-                              className="text-sm"
+                              className={cn("text-sm", item.sku && "border-green-300 bg-green-50")}
                               placeholder="Optional SKU"
                             />
                           </div>
                           <div>
-                            <Label className="text-xs sm:text-sm">Barcode</Label>
+                            <Label className="text-xs sm:text-sm">
+                              Barcode
+                              {item.barcode && (
+                                <span className="ml-1 text-xs font-normal text-green-600">
+                                  ✓ Extracted
+                                </span>
+                              )}
+                            </Label>
                             <Input 
                               value={item.barcode || ''}
                               onChange={(e) => updateItemValue(index, 'barcode', e.target.value)}
-                              className="text-sm"
+                              className={cn("text-sm", item.barcode && "border-green-300 bg-green-50")}
                               placeholder="Optional barcode"
                             />
                           </div>
@@ -1242,9 +1351,21 @@ export default function InvoiceWizardPage() {
                 {editingItems.length === 0 && (
                   <div className="text-center py-8 text-gray-500">
                     <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                    <p>No items found. Please go back and scan an invoice.</p>
+                    <p>No items found. Click "Add Item Manually" below to add items.</p>
                   </div>
                 )}
+
+                {/* Add Item Manually Button */}
+                <div className="pt-4 border-t">
+                  <Button
+                    onClick={addNewItem}
+                    variant="outline"
+                    className="w-full border-dashed border-2 border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400 py-6"
+                  >
+                    <Plus className="w-5 h-5 mr-2" />
+                    Add Item Manually
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1369,7 +1490,12 @@ export default function InvoiceWizardPage() {
                           <div className="flex-1">
                             <div className="font-medium">{item.productName}</div>
                             <div className="text-xs text-gray-600 dark:text-gray-400">
-                              {item.quantity} × QR {item.unitPrice.toFixed(2)}
+                              {item.quantity}
+                              {item.uom && <span className="text-purple-600"> {item.uom}</span>}
+                              {item.crtQty && item.pcsQty && (
+                                <span className="text-purple-600"> ({item.crtQty}×{item.pcsQty})</span>
+                              )}
+                              {' × QR '}{item.unitPrice.toFixed(2)}
                             </div>
                           </div>
                           <div className="font-medium">

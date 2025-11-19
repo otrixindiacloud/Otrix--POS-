@@ -55,7 +55,7 @@ interface StockTakingItem {
   actualQty: number;
   costPrice: number;
   sellingPrice: number;
-  notes?: string;
+  description?: string;
   variance: number;
   varianceValue: number;
   isNewProduct: boolean;
@@ -265,30 +265,81 @@ export default function StockTaking() {
           actualQty: product.stock || 1,
           costPrice: parseFloat(product.costPrice || product.cost || "0"),
           sellingPrice: parseFloat(product.price || "0"),
-          notes: "",
+          description: product.description || "",
           variance: 0,
           varianceValue: 0,
-          isNewProduct: false,
+          isNewProduct: product.isExternal || false,
         };
 
         setItems([...items, newItem]);
         setScanInput("");
-        toast({
-          title: "Product Added",
-          description: `${product.name} added to stock taking.`,
-        });
+        
+        if (product.isExternal) {
+          toast({
+            title: "✅ Product Found Online!",
+            description: `${product.name} - Auto-filled from barcode database. Please verify and set prices.`,
+          });
+        } else {
+          toast({
+            title: "Product Added",
+            description: `${product.name} added to stock taking.`,
+          });
+        }
       } else {
-        // Product not found - create new product entry
+        // Product not found in local system - try external barcode databases
+        let externalProduct = null;
+        try {
+          toast({
+            title: "🔍 Searching online...",
+            description: "Looking up barcode in global databases",
+          });
+          
+          // Try Open Food Facts first
+          const openFoodResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${scanInput}.json`);
+          if (openFoodResponse.ok) {
+            const openFoodData = await openFoodResponse.json();
+            if (openFoodData.status === 1 && openFoodData.product) {
+              externalProduct = {
+                name: openFoodData.product.product_name || openFoodData.product.product_name_en || "",
+                description: openFoodData.product.generic_name || openFoodData.product.categories || "",
+                brand: openFoodData.product.brands || "",
+              };
+            }
+          }
+
+          // If not found in Open Food Facts, try UPC Item DB
+          if (!externalProduct || !externalProduct.name) {
+            try {
+              const upcResponse = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${scanInput}`);
+              if (upcResponse.ok) {
+                const upcData = await upcResponse.json();
+                if (upcData.code === "OK" && upcData.items && upcData.items.length > 0) {
+                  const item = upcData.items[0];
+                  externalProduct = {
+                    name: item.title || "",
+                    description: item.description || item.category || "",
+                    brand: item.brand || "",
+                  };
+                }
+              }
+            } catch (upcError) {
+              console.log("Could not fetch from UPC Item DB:", upcError);
+            }
+          }
+        } catch (error) {
+          console.log("Could not fetch from external barcode databases:", error);
+        }
+
         const newItem: StockTakingItem = {
           sku: scanInput,
           barcode: scanInput,
-          name: `New Product - ${scanInput}`,
+          name: externalProduct ? `${externalProduct.brand ? externalProduct.brand + ' - ' : ''}${externalProduct.name}` : `New Product - ${scanInput}`,
           uom: "ea",
           systemQty: 0,
-          actualQty: 0,
+          actualQty: 1,
           costPrice: 0,
           sellingPrice: 0,
-          notes: "",
+          description: externalProduct?.description || "",
           variance: 0,
           varianceValue: 0,
           isNewProduct: true,
@@ -297,8 +348,11 @@ export default function StockTaking() {
         setItems([...items, newItem]);
         setScanInput("");
         toast({
-          title: "New Product Added",
-          description: "Product not found in system. Added as new product.",
+          title: externalProduct ? "✅ Product Found Online!" : "⚠️ Product Not Found",
+          description: externalProduct 
+            ? `${newItem.name} - Auto-filled from barcode database. Please verify and set prices.`
+            : "Product not found in system or online. Please enter product details.",
+          variant: externalProduct ? "default" : "destructive",
         });
       }
     } catch (error) {
@@ -433,7 +487,7 @@ export default function StockTaking() {
       actualQty: 1, // Default to 1 for manual products
       costPrice: 0,
       sellingPrice: 0,
-      notes: "",
+      description: "",
       variance: 0,
       varianceValue: 0,
       isNewProduct: true,
@@ -558,46 +612,98 @@ export default function StockTaking() {
           actualQty: 1, // Default to 1 for scanning
           costPrice: parseFloat(product.costPrice || product.cost || "0"),
           sellingPrice: parseFloat(product.price || "0"),
-          notes: "",
+          description: product.description || "",
           variance: 0,
           varianceValue: 0,
-          isNewProduct: false,
+          isNewProduct: product.isExternal || false, // Mark external products as new
         };
 
         setItems([...items, newItem]);
         setScanInput("");
-        toast({
-          title: "Product Scanned & Added",
-          description: `${product.name} automatically added to stock taking.`,
-        });
+        
+        if (product.isExternal) {
+          toast({
+            title: "✅ Product Found Online!",
+            description: `${product.name} - Auto-filled from barcode database. Please verify and set prices.`,
+          });
+        } else {
+          toast({
+            title: "Product Scanned & Added",
+            description: `${product.name} automatically added to stock taking.`,
+          });
+        }
       } else {
-        // Product not found - create new product entry
+        // Product not found in system - try external barcode databases
+        let externalProduct = null;
+        try {
+          // Try Open Food Facts first
+          const openFoodResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+          if (openFoodResponse.ok) {
+            const openFoodData = await openFoodResponse.json();
+            if (openFoodData.status === 1 && openFoodData.product) {
+              externalProduct = {
+                name: openFoodData.product.product_name || openFoodData.product.product_name_en || "",
+                description: openFoodData.product.generic_name || openFoodData.product.categories || "",
+                brand: openFoodData.product.brands || "",
+              };
+            }
+          }
+
+          // If not found in Open Food Facts, try UPC Item DB
+          if (!externalProduct || !externalProduct.name) {
+            try {
+              const upcResponse = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`);
+              if (upcResponse.ok) {
+                const upcData = await upcResponse.json();
+                if (upcData.code === "OK" && upcData.items && upcData.items.length > 0) {
+                  const item = upcData.items[0];
+                  externalProduct = {
+                    name: item.title || "",
+                    description: item.description || item.category || "",
+                    brand: item.brand || "",
+                  };
+                }
+              }
+            } catch (upcError) {
+              console.log("Could not fetch from UPC Item DB:", upcError);
+            }
+          }
+        } catch (error) {
+          console.log("Could not fetch from external barcode databases:", error);
+        }
+
         const newItemIndex = items.length;
         const newItem: StockTakingItem = {
           sku: barcode,
           barcode: barcode,
-          name: `New Product - ${barcode}`,
+          name: externalProduct ? `${externalProduct.brand ? externalProduct.brand + ' - ' : ''}${externalProduct.name}` : `New Product - ${barcode}`,
           uom: "ea",
           systemQty: 0,
           actualQty: 1, // Default to 1 for new products
           costPrice: 0,
           sellingPrice: 0,
-          notes: "",
+          description: externalProduct?.description || "",
           variance: 0,
           varianceValue: 0,
           isNewProduct: true,
         };
 
-        setItems([...items, newItem]);
+        const newItems = [...items, newItem];
+        setItems(newItems);
         setScanInput("");
         
-        // Auto-open edit mode for new products
-        setEditingIndex(newItemIndex);
-        setEditForm(newItem);
+        // Auto-open edit mode for new products - use setTimeout to ensure state is updated
+        setTimeout(() => {
+          setEditingIndex(newItemIndex);
+          setEditForm(newItem);
+        }, 50);
         
         toast({
-          title: "New Product Scanned & Added",
-          description: `Barcode ${barcode} not found in system. Added as new product. Please fill in the details.`,
+          title: externalProduct ? "✅ Product Found Online!" : "⚠️ Product Not Found",
+          description: externalProduct 
+            ? `${newItem.name} - Auto-filled from barcode database. Please verify and set prices.`
+            : `Barcode ${barcode} not in system or online. Please enter product details.`,
+          variant: externalProduct ? "default" : "destructive",
         });
       }
     } catch (error) {
@@ -612,10 +718,10 @@ export default function StockTaking() {
 
   return (
     <MainLayout>
-      <div className="min-h-screen bg-gray-50">
+      <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
         {/* Professional Header with Light Colors */}
-        <div className="bg-white border-b border-gray-200 shadow-sm">
-          <div className="px-6 py-4">
+        <div className="bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
+          <div className="px-6 py-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <Link href="/inventory">
@@ -672,20 +778,20 @@ export default function StockTaking() {
         </div>
 
         {/* Enhanced Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="bg-white shadow-sm border-b border-gray-200">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-1 overflow-hidden">
+          <div className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
             <div className="px-6">
-              <TabsList className="w-full grid grid-cols-2 bg-transparent rounded-none h-14 p-0 border-0">
+              <TabsList className="w-full grid grid-cols-2 bg-transparent rounded-none h-12 p-0 border-0">
                 <TabsTrigger
                   value="count"
-                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 font-semibold transition-all px-6 py-4"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 font-semibold transition-all px-5 py-3"
                 >
                   <Barcode className="w-5 h-5 mr-2" />
                   Physical Count
                 </TabsTrigger>
                 <TabsTrigger
                   value="compare"
-                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 font-semibold transition-all px-6 py-4"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 font-semibold transition-all px-5 py-3"
                 >
                   <Eye className="w-5 h-5 mr-2" />
                   Compare & Report
@@ -694,14 +800,14 @@ export default function StockTaking() {
             </div>
           </div>
 
-          <div className="p-6 space-y-6">
-            <TabsContent value="count" className="space-y-6 mt-0">
-              {/* Enhanced Scanner Section */}
-              <Card className="border border-gray-200 shadow-sm bg-white">
-                <CardContent className="p-6">
-                  <div className="space-y-4">
+          <div className="p-4 space-y-4 flex-1 flex flex-col overflow-hidden">
+            <TabsContent value="count" className="space-y-4 mt-0 flex flex-col flex-1 overflow-hidden">
+              {/* Scanner Section */}
+              <Card className="border border-gray-200 shadow-sm bg-white flex-shrink-0">
+                <CardContent className="p-3">
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                      <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                         <Barcode className="w-4 h-4 text-blue-600" />
                         Scan or Search Product
                       </Label>
@@ -709,24 +815,24 @@ export default function StockTaking() {
                         onClick={handleAddManual}
                         variant="outline"
                         size="sm"
-                        className="border-blue-300 hover:bg-blue-50 hover:border-blue-400 text-blue-700 font-medium transition-colors"
+                        className="h-8 text-xs border-blue-200 hover:bg-blue-50 text-blue-600"
                       >
-                        <Plus className="w-4 h-4 mr-2" />
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />
                         Add Manual Item
                       </Button>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex gap-2">
                       <Input
                         placeholder="Scan barcode or enter SKU..."
                         value={scanInput}
                         onChange={(e) => setScanInput(e.target.value)}
                         onKeyPress={(e) => e.key === "Enter" && handleScan()}
-                        className="flex-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                        className="flex-1 h-10 text-sm"
                       />
                       <Button
                         onClick={() => setShowBarcodeScanner(true)}
                         size="sm"
-                        className="px-4 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md"
+                        className="h-10 w-10 p-0 bg-indigo-600 hover:bg-indigo-700"
                       >
                         <Camera className="w-4 h-4" />
                       </Button>
@@ -734,7 +840,7 @@ export default function StockTaking() {
                         onClick={handleScan}
                         disabled={!scanInput.trim()}
                         size="sm"
-                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                        className="h-10 w-10 p-0 bg-blue-600 hover:bg-blue-700"
                       >
                         <Barcode className="w-4 h-4" />
                       </Button>
@@ -744,15 +850,16 @@ export default function StockTaking() {
               </Card>
 
               {/* Enhanced Items List */}
-              <div className="space-y-4">
+              {/* Enhanced Items List */}
+<div className="flex-1 overflow-hidden">
                 {items.length === 0 ? (
-                  <Card className="border border-gray-200 shadow-sm bg-white">
-                    <CardContent className="p-12 text-center">
-                      <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
-                        <Barcode className="w-10 h-10 text-blue-600" />
+                    <Card className="border border-gray-200 shadow-sm bg-white">
+                      <CardContent className="p-6 text-center">
+                      <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-3">
+                        <Barcode className="w-8 h-8 text-blue-600" />
                       </div>
-                      <p className="text-gray-700 font-medium text-lg mb-2">No items scanned yet</p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-gray-700 font-medium text-base mb-1">No items scanned yet</p>
+                      <p className="text-xs text-gray-500">
                         Use the scanner above to add products to your inventory count
                       </p>
                     </CardContent>
@@ -761,265 +868,247 @@ export default function StockTaking() {
                   items.map((item, index) => (
                     <Card
                       key={index}
-                      className={`border shadow-sm transition-all hover:shadow-md ${
+                      className={`border transition-all ${
                         item.isNewProduct 
-                          ? "bg-blue-50 border-blue-200 border-l-4 border-l-blue-500" 
-                          : "bg-white border-gray-200 hover:bg-gray-50"
+                          ? "bg-blue-50/50 border-l-4 border-l-blue-500 border-t border-r border-b border-blue-200" 
+                          : "bg-white border-gray-200 hover:border-gray-300"
                       }`}
                     >
-                      <CardContent className="p-6">
+                      <CardContent className="p-2">
                         {editingIndex === index ? (
                           <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            {item.isNewProduct && (
+                              <div className="flex items-start gap-2 p-3 bg-amber-50 border-l-4 border-amber-500 rounded-r">
+                                <Badge className="bg-amber-600 hover:bg-amber-600 text-white text-xs shrink-0">
+                                  ⚠️ NEW
+                                </Badge>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-amber-900 font-semibold mb-0.5">
+                                    Product not found in inventory
+                                  </p>
+                                  <p className="text-xs text-amber-700">
+                                    SKU: <span className="font-mono font-semibold">{editForm.sku || item.sku}</span>
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div>
-                                <Label className="text-xs font-medium text-gray-700">SKU</Label>
+                                <Label className="text-xs font-semibold text-gray-700 mb-1 block">
+                                  SKU {item.isNewProduct && <span className="text-gray-500 font-normal">(locked)</span>}
+                                </Label>
                                 <Input
                                   value={editForm.sku || ""}
-                                  onChange={(e) =>
-                                    setEditForm({
-                                      ...editForm,
-                                      sku: e.target.value,
-                                    })
-                                  }
-                                  className="mt-1 border-gray-300 focus:border-blue-500"
+                                  onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })}
+                                  className="h-9 text-sm"
+                                  readOnly={item.isNewProduct}
+                                  disabled={item.isNewProduct}
                                 />
                               </div>
                               <div>
-                                <Label className="text-xs font-medium text-gray-700">UOM</Label>
+                                <Label className="text-xs font-semibold text-gray-700 mb-1 block">
+                                  UOM <span className="text-red-500">*</span>
+                                </Label>
                                 <Input
                                   value={editForm.uom || ""}
-                                  onChange={(e) =>
-                                    setEditForm({
-                                      ...editForm,
-                                      uom: e.target.value,
-                                    })
-                                  }
-                                  className="mt-1 border-gray-300 focus:border-blue-500"
+                                  onChange={(e) => setEditForm({ ...editForm, uom: e.target.value })}
+                                  placeholder="ea, kg, box"
+                                  className="h-9 text-sm"
                                 />
                               </div>
                             </div>
+
                             <div>
-                              <Label className="text-xs font-medium text-gray-700">Product Name</Label>
+                              <Label className="text-xs font-semibold text-gray-700 mb-1 block">
+                                Product Name <span className="text-red-500">*</span>
+                              </Label>
                               <Input
                                 value={editForm.name || ""}
-                                onChange={(e) =>
-                                  setEditForm({
-                                    ...editForm,
-                                    name: e.target.value,
-                                  })
-                                }
-                                className="mt-1 border-gray-300 focus:border-blue-500"
+                                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                placeholder="Enter product name"
+                                autoFocus={editForm.isNewProduct}
+                                className="h-9 text-sm"
                               />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+
+                            <div className="grid grid-cols-2 gap-3">
                               <div>
-                                <Label className="text-xs font-medium text-gray-700">Cost Price</Label>
+                                <Label className="text-xs font-semibold text-gray-700 mb-1 block">
+                                  Cost (QR) <span className="text-red-500">*</span>
+                                </Label>
                                 <Input
                                   type="number"
                                   step="0.01"
+                                  min="0"
                                   value={editForm.costPrice || 0}
-                                  onChange={(e) =>
-                                    setEditForm({
-                                      ...editForm,
-                                      costPrice:
-                                        parseFloat(e.target.value) || 0,
-                                    })
-                                  }
-                                  className="mt-1 border-gray-300 focus:border-blue-500"
+                                  onChange={(e) => setEditForm({ ...editForm, costPrice: parseFloat(e.target.value) || 0 })}
+                                  className="h-9 text-sm"
                                 />
                               </div>
                               <div>
-                                <Label className="text-xs font-medium text-gray-700">Selling Price</Label>
+                                <Label className="text-xs font-semibold text-gray-700 mb-1 block">
+                                  Price (QR) <span className="text-red-500">*</span>
+                                </Label>
                                 <Input
                                   type="number"
                                   step="0.01"
+                                  min="0"
                                   value={editForm.sellingPrice || 0}
-                                  onChange={(e) =>
-                                    setEditForm({
-                                      ...editForm,
-                                      sellingPrice:
-                                        parseFloat(e.target.value) || 0,
-                                    })
-                                  }
-                                  className="mt-1 border-gray-300 focus:border-blue-500"
+                                  onChange={(e) => setEditForm({ ...editForm, sellingPrice: parseFloat(e.target.value) || 0 })}
+                                  className="h-9 text-sm"
                                 />
                               </div>
                             </div>
+
                             <div>
-                              <Label className="text-xs font-medium text-gray-700">Actual Quantity</Label>
+                              <Label className="text-xs font-semibold text-gray-700 mb-1 block">
+                                Actual Quantity <span className="text-red-500">*</span>
+                              </Label>
                               <Input
                                 type="number"
+                                min="0"
+                                step="1"
                                 value={editForm.actualQty || 0}
-                                onChange={(e) =>
-                                  setEditForm({
-                                    ...editForm,
-                                    actualQty: parseFloat(e.target.value) || 0,
-                                  })
-                                }
-                                className="mt-1 border-gray-300 focus:border-blue-500"
+                                onChange={(e) => setEditForm({ ...editForm, actualQty: parseFloat(e.target.value) || 0 })}
+                                className="h-9 text-sm"
                               />
                             </div>
+
                             <div>
-                              <Label className="text-xs font-medium text-gray-700">Notes</Label>
+                              <Label className="text-xs font-semibold text-gray-700 mb-1 block">
+                                Description
+                              </Label>
                               <Textarea
-                                value={editForm.notes || ""}
-                                onChange={(e) =>
-                                  setEditForm({
-                                    ...editForm,
-                                    notes: e.target.value,
-                                  })
-                                }
-                                className="mt-1 border-gray-300 focus:border-blue-500"
+                                value={editForm.description || ""}
+                                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                                placeholder="Add notes or description"
+                                className="text-sm resize-none"
                                 rows={2}
                               />
                             </div>
-                            <div className="flex gap-3">
+
+                            <div className="flex gap-2 pt-2 border-t">
                               <Button
                                 onClick={handleEditSave}
-                                size="sm"
-                                className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-md"
+                                className="flex-1 h-9 bg-green-600 hover:bg-green-700 text-sm"
                               >
-                                <Check className="w-4 h-4 mr-2" />
+                                <Check className="w-3.5 h-3.5 mr-1.5" />
                                 Save
                               </Button>
                               <Button
                                 onClick={handleEditCancel}
                                 variant="outline"
-                                size="sm"
-                                className="flex-1 border-gray-300 hover:bg-gray-100"
+                                className="flex-1 h-9 text-sm"
                               >
-                                <X className="w-4 h-4 mr-2" />
+                                <X className="w-3.5 h-3.5 mr-1.5" />
                                 Cancel
                               </Button>
                             </div>
                           </div>
                         ) : (
-                          <div className="space-y-4">
+                          <div className="space-y-2.5">
+                            {/* Header */}
                             <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h3
-                                    className={`font-semibold text-base ${item.isNewProduct ? "text-blue-700" : "text-gray-800"}`}
-                                  >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                  <h3 className={`font-semibold text-sm truncate ${item.isNewProduct ? "text-blue-700" : "text-gray-900"}`}>
                                     {item.name}
                                   </h3>
                                   {item.isNewProduct && (
-                                    <Badge
-                                      className="text-xs bg-blue-600 text-white"
-                                    >
+                                    <Badge className="text-[10px] bg-blue-600 hover:bg-blue-600 text-white px-1.5 py-0 h-4 shrink-0">
                                       NEW
                                     </Badge>
                                   )}
                                 </div>
-                                <p className="text-sm text-gray-500 font-mono">
-                                  SKU: {item.sku}
-                                </p>
+                                <p className="text-[11px] text-gray-500 font-mono">{item.sku}</p>
                               </div>
-                              <div className="flex gap-2">
+                              <div className="flex gap-1 ml-2">
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleEditStart(index)}
-                                  className="p-2 hover:bg-blue-100 text-blue-600 rounded-full"
+                                  className="h-7 w-7 p-0 hover:bg-blue-50 text-blue-600 rounded"
                                 >
-                                  <Edit2 className="w-4 h-4" />
+                                  <Edit2 className="w-3 h-3" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() =>
-                                    setItems(
-                                      items.filter((_, i) => i !== index),
-                                    )
-                                  }
-                                  className="p-2 hover:bg-red-100 text-red-600 rounded-full"
+                                  onClick={() => setItems(items.filter((_, i) => i !== index))}
+                                  className="h-7 w-7 p-0 hover:bg-red-50 text-red-600 rounded"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="w-3 h-3" />
                                 </Button>
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 text-sm bg-gray-50 p-4 rounded-lg">
-                              <div>
-                                <span className="text-gray-600 font-medium">
-                                  System Qty:
-                                </span>
-                                <span className="ml-2 font-semibold text-gray-800">
-                                  {item.systemQty}
-                                </span>
+                            {/* Description */}
+                            {item.description && (
+                              <div className="bg-blue-50 border border-blue-200 rounded px-2 py-1.5">
+                                <p className="text-[11px] text-blue-800 line-clamp-2 leading-relaxed">{item.description}</p>
                               </div>
-                              <div>
-                                <span className="text-gray-600 font-medium">UOM:</span>
-                                <span className="ml-2 text-gray-800">{item.uom}</span>
-                              </div>
-                            </div>
+                            )}
 
-                            <div>
-                              <Label className="text-xs font-semibold text-gray-700">Actual Quantity</Label>
-                              <div className="flex items-center gap-3 mt-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleQtyDecrease(index)}
-                                  className="h-10 w-10 p-0 rounded-full border-2 border-red-300 hover:bg-red-50 hover:border-red-400 text-red-600"
-                                  disabled={item.actualQty <= 0}
-                                >
-                                  <Minus className="w-4 h-4" />
-                                </Button>
-                                <Input
-                                  type="number"
-                                  value={item.actualQty}
-                                  onChange={(e) =>
-                                    handleActualQtyChange(index, e.target.value)
-                                  }
-                                  className="text-center flex-1 h-10 font-semibold text-lg border-2 border-blue-300 focus:border-blue-500"
-                                  min="0"
-                                  step="1"
-                                />
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleQtyIncrease(index)}
-                                  className="h-10 w-10 p-0 rounded-full border-2 border-green-300 hover:bg-green-50 hover:border-green-400 text-green-600"
-                                >
-                                  <Plus className="w-4 h-4" />
-                                </Button>
+                            {/* Info Grid - 2x2 Layout */}
+                            <div className="grid grid-cols-2 gap-2 text-[11px]">
+                              <div className="bg-gray-50 px-2 py-1.5 rounded border border-gray-200">
+                                <div className="text-gray-500 mb-0.5">System</div>
+                                <div className="font-semibold text-gray-900">{item.systemQty}</div>
                               </div>
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                              <div>
-                                <span className="text-xs text-gray-600 font-medium">
-                                  Variance:
-                                </span>
-                                <span
-                                  className={`ml-2 font-bold text-lg ${
-                                    item.variance > 0
-                                      ? "text-green-600"
-                                      : item.variance < 0
-                                        ? "text-red-600"
-                                        : "text-gray-600"
-                                  }`}
-                                >
-                                  {item.variance > 0 ? "+" : ""}
-                                  {item.variance}
-                                </span>
+                              <div className="bg-gray-50 px-2 py-1.5 rounded border border-gray-200">
+                                <div className="text-gray-500 mb-0.5">UOM</div>
+                                <div className="font-semibold text-gray-900">{item.uom}</div>
                               </div>
-                              <div className="text-right">
-                                <span className="text-xs text-gray-600 font-medium">
-                                  Value:
-                                </span>
-                                <span
-                                  className={`ml-2 font-bold text-lg ${
-                                    (item.varianceValue || 0) > 0
-                                      ? "text-green-600"
-                                      : (item.varianceValue || 0) < 0
-                                        ? "text-red-600"
-                                        : "text-gray-600"
-                                  }`}
-                                >
-                                  QR {(item.varianceValue || 0).toFixed(2)}
-                                </span>
+                              <div className={`px-2 py-1.5 rounded border ${
+                                item.variance > 0 ? "bg-green-50 border-green-300" :
+                                item.variance < 0 ? "bg-red-50 border-red-300" :
+                                "bg-gray-50 border-gray-300"
+                              }`}>
+                                <div className={`mb-0.5 ${
+                                  item.variance > 0 ? "text-green-700" :
+                                  item.variance < 0 ? "text-red-700" :
+                                  "text-gray-500"
+                                }`}>Diff</div>
+                                <div className={`font-semibold ${
+                                  item.variance > 0 ? "text-green-700" :
+                                  item.variance < 0 ? "text-red-700" :
+                                  "text-gray-900"
+                                }`}>
+                                  {item.variance > 0 ? "+" : ""}{item.variance}
+                                </div>
+                              </div>
+                              <div className="bg-blue-50 px-2 py-1.5 rounded border border-blue-200">
+                                <div className="text-gray-500 mb-0.5">Actual Qty</div>
+                                <div className="flex items-center justify-between gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleQtyDecrease(index)}
+                                    disabled={item.actualQty <= 0}
+                                    className="h-5 w-5 p-0 rounded-full hover:bg-red-100 disabled:opacity-30"
+                                  >
+                                    <Minus className="w-3 h-3 text-red-600" />
+                                  </Button>
+                                  <Input
+                                    type="number"
+                                    value={item.actualQty}
+                                    onChange={(e) => handleActualQtyChange(index, e.target.value)}
+                                    className="text-center h-5 font-bold text-sm border-0 bg-transparent focus:bg-white focus:border focus:border-blue-400 focus:ring-1 focus:ring-blue-200 rounded px-1 w-12"
+                                    min="0"
+                                    step="1"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleQtyIncrease(index)}
+                                    className="h-5 w-5 p-0 rounded-full hover:bg-green-100"
+                                  >
+                                    <Plus className="w-3 h-3 text-green-600" />
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1030,35 +1119,35 @@ export default function StockTaking() {
                 )}
               </div>
 
-              {/* Enhanced Summary & Submit */}
+              {/* Summary & Submit */}
               {items.length > 0 && (
-                <Card className="border border-blue-200 shadow-sm bg-blue-50">
-                  <CardContent className="p-6">
-                    <h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center gap-2">
-                      <Settings className="w-5 h-5 text-blue-600" />
+                <Card className="border border-gray-200 shadow-sm bg-gradient-to-br from-blue-50 to-white flex-shrink-0">
+                  <CardContent className="p-2">
+                    <h3 className="font-semibold text-sm text-gray-800 mb-2 flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-blue-600" />
                       Stock Taking Summary
                     </h3>
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                        <span className="text-gray-600 text-xs font-medium block mb-1">Total Items</span>
-                        <span className="text-2xl font-bold text-gray-800">{items.length}</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-2">
+                      <div className="bg-white p-2 rounded-md border border-gray-200">
+                        <span className="text-gray-600 text-[10px] font-medium block mb-0.5">Total Items</span>
+                        <span className="text-lg font-bold text-gray-800">{items.length}</span>
                       </div>
-                      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                        <span className="text-gray-600 text-xs font-medium block mb-1">New Products</span>
-                        <span className="text-2xl font-bold text-blue-600">
+                      <div className="bg-white p-2 rounded-md border border-gray-200">
+                        <span className="text-gray-600 text-[10px] font-medium block mb-0.5">New Products</span>
+                        <span className="text-lg font-bold text-blue-600">
                           {items.filter((i) => i.isNewProduct).length}
                         </span>
                       </div>
-                      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                        <span className="text-gray-600 text-xs font-medium block mb-1">Variance Items</span>
-                        <span className="text-2xl font-bold text-orange-600">
+                      <div className="bg-white p-2 rounded-md border border-gray-200">
+                        <span className="text-gray-600 text-[10px] font-medium block mb-0.5">Variance Items</span>
+                        <span className="text-lg font-bold text-orange-600">
                           {items.filter((i) => i.variance !== 0).length}
                         </span>
                       </div>
-                      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                        <span className="text-gray-600 text-xs font-medium block mb-1">Total Variance</span>
+                      <div className="bg-white p-2 rounded-md border border-gray-200">
+                        <span className="text-gray-600 text-[10px] font-medium block mb-0.5">Total Variance</span>
                         <span
-                          className={`text-2xl font-bold ${
+                          className={`text-lg font-bold ${
                             items.reduce(
                               (sum, item) => sum + item.varianceValue,
                               0,
@@ -1072,31 +1161,32 @@ export default function StockTaking() {
                                 : "text-gray-600"
                           }`}
                         >
-                          QR
-                          {items
+                          QR{items
                             .reduce((sum, item) => sum + item.varianceValue, 0)
                             .toFixed(2)}
                         </span>
                       </div>
                     </div>
 
-                    <Button
-                      onClick={handleSubmit}
-                      disabled={submitMutation.isPending}
-                      className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all"
-                    >
-                      {submitMutation.isPending ? (
-                        <>
-                          <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
-                          Submitting Stock Taking...
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-5 h-5 mr-2" />
-                          Submit Stock Taking
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex justify-center pt-1">
+                      <Button
+                        onClick={handleSubmit}
+                        disabled={submitMutation.isPending}
+                        className="w-64 h-9 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all"
+                      >
+                        {submitMutation.isPending ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5 mr-2" />
+                            Submit Stock Taking
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               )}

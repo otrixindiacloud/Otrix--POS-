@@ -700,8 +700,12 @@ export default function PaymentModal() {
                 <span>QR {subtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Tax:</span>
+                <span>VAT:</span>
                 <span>QR {vat.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between border-t pt-1">
+                <span>Grand Total:</span>
+                <span>QR {(subtotal + vat).toFixed(2)}</span>
               </div>
               {transactionDiscount > 0 && (
                 <div className="flex justify-between text-green-600 dark:text-green-400">
@@ -709,8 +713,8 @@ export default function PaymentModal() {
                   <span>-QR {transactionDiscount.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-semibold text-lg border-t pt-1">
-                <span>Total:</span>
+              <div className="flex justify-between font-semibold text-lg border-t pt-1 mt-1">
+                <span>Total Amount:</span>
                 <span>QR {total.toFixed(2)}</span>
               </div>
             </div>
