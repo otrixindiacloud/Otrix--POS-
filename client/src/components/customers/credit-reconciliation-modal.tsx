@@ -367,7 +367,7 @@ export default function CreditReconciliationModal({
         </DialogHeader>
 
         {/* Customer Credit Summary */}
-        <Card className="mb-6">
+        <Card className="mb-3">
           <CardContent className="p-4">
             {loadingCustomer ? (
               <div className="flex items-center justify-center py-4">
@@ -402,7 +402,7 @@ export default function CreditReconciliationModal({
         </Card>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 mb-6">
+        <div className="flex border-b border-slate-200 mb-3">
           <button
             onClick={() => setActiveTab("new")}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${

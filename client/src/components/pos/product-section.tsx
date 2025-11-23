@@ -125,11 +125,15 @@ export default function ProductSection({
   const { data: allProducts = [], isLoading: allProductsLoading, refetch: refetchStoreProducts } = useQuery({
     queryKey: ["/api/stores", currentStore?.id, "products"],
     queryFn: async () => {
-      if (!currentStore) return [];
+      if (!currentStore) {
+        console.log('[POS] No store selected, returning empty products');
+        return [];
+      }
+      console.log('[POS] Fetching products for store:', currentStore.id, currentStore.name);
       const response = await fetch(`/api/stores/${currentStore.id}/products`);
       if (!response.ok) throw new Error('Failed to fetch store products');
       const data = await response.json();
-      console.log('Store products received:', data.slice(0, 3)); // Debug log
+      console.log('[POS] Received', data.length, 'products for store', currentStore.id);
       return data;
     },
     enabled: !!currentStore,
@@ -138,6 +142,7 @@ export default function ProductSection({
   // Listen for payment success events to refresh product stock
   useEffect(() => {
     const handlePaymentSuccess = () => {
+      console.log('[POS] Payment success - refreshing products');
       // Refetch store products to update stock after sale
       refetchStoreProducts();
       // Also invalidate the query to ensure fresh data
@@ -159,6 +164,53 @@ export default function ProductSection({
       window.removeEventListener("paymentSuccess", handlePaymentSuccess);
     };
   }, [refetchStoreProducts, queryClient, currentStore?.id]);
+
+  // Listen for store change events to refresh products in POS
+  useEffect(() => {
+    const handleStoreChanged = (event: CustomEvent) => {
+      const { storeId, storeName } = event.detail;
+      console.log('[POS] Store changed to:', storeName, '(id:', storeId, ') - refreshing products');
+      // Invalidate all store product queries to force a refresh
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return typeof key === 'string' && (
+            key.startsWith('/api/stores') || 
+            key.startsWith('/api/products')
+          );
+        }
+      });
+    };
+
+    const handleClearStoreCache = () => {
+      console.log('[POS] Clear store cache event - invalidating queries');
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return typeof key === 'string' && (
+            key.startsWith('/api/stores') || 
+            key.startsWith('/api/products')
+          );
+        }
+      });
+    };
+
+    window.addEventListener("storeChanged", handleStoreChanged as EventListener);
+    window.addEventListener("clearStoreCache", handleClearStoreCache as EventListener);
+    
+    return () => {
+      window.removeEventListener("storeChanged", handleStoreChanged as EventListener);
+      window.removeEventListener("clearStoreCache", handleClearStoreCache as EventListener);
+    };
+  }, [queryClient]);
+
+  // Force refetch when currentStore changes
+  useEffect(() => {
+    if (currentStore?.id) {
+      console.log('[POS] Current store changed in state to:', currentStore.id, currentStore.name, '- refetching products');
+      refetchStoreProducts();
+    }
+  }, [currentStore?.id]);
 
   // Get product categories for filtering
   const { data: categories = [], isLoading: categoriesLoading } = useQuery({

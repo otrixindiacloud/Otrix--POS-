@@ -9,6 +9,8 @@ app.use(express.urlencoded({ extended: false }));
 
 // Serve static invoice files
 app.use("/static", express.static("static"));
+// Serve uploaded invoice images
+app.use("/uploads", express.static("uploads"));
 
 app.use((req, res, next) => {
   const start = Date.now();

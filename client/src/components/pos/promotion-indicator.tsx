@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Sparkles, Tag, Percent } from "lucide-react";
 import { usePOSStore } from "@/lib/pos-store";
 import { useStore } from "@/hooks/useStore";
+import { useMemo } from "react";
 
 interface Promotion {
   id: number;
@@ -16,14 +17,27 @@ export default function PromotionIndicator() {
   const { cartItems } = usePOSStore();
   const { currentStore } = useStore();
 
+  // Create a stable identifier from cart items to avoid unnecessary refetches
+  const cartKey = useMemo(() => {
+    if (cartItems.length === 0) return "empty";
+    return cartItems
+      .map(item => `${item.productId}:${item.quantity}`)
+      .sort()
+      .join(",");
+  }, [cartItems]);
+
   const { data: activePromotions = [] } = useQuery<Promotion[]>({
     queryKey: ["/api/promotions/active"],
     enabled: !!currentStore,
+    staleTime: 60000, // Cache for 1 minute
+    refetchOnWindowFocus: false,
   });
 
   const { data: applicablePromotions = [] } = useQuery<Promotion[]>({
-    queryKey: ["/api/promotions/applicable", cartItems],
-    enabled: cartItems.length > 0 && !!currentStore,
+    queryKey: ["/api/promotions/applicable", cartKey],
+    enabled: cartItems.length > 0 && !!currentStore && cartKey !== "empty",
+    staleTime: 5000, // Cache for 5 seconds
+    refetchOnWindowFocus: false,
   });
 
   const handleApplyPromotions = async () => {

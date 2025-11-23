@@ -179,7 +179,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     }
-  }, [state])
+  }, []) // Remove state from dependencies - we only want to register/unregister the listener once on mount/unmount
 
   return {
     ...state,

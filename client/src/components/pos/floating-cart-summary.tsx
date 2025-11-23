@@ -75,8 +75,11 @@ export default function FloatingCartSummary() {
     const handleMouseUp = () => {
       if (isDragging) {
         setIsDragging(false);
-        // Save position to localStorage
-        localStorage.setItem('floatingCartPosition', JSON.stringify(position));
+        // Save position to localStorage when dragging stops
+        setPosition(prevPosition => {
+          localStorage.setItem('floatingCartPosition', JSON.stringify(prevPosition));
+          return prevPosition;
+        });
       }
     };
 
@@ -89,7 +92,7 @@ export default function FloatingCartSummary() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, dragOffset, position]);
+  }, [isDragging, dragOffset]);
 
   return (
     <div 

@@ -367,12 +367,10 @@ export const storeProducts = pgTable("store_products", {
   storeId: integer("store_id").references(() => stores.id).notNull(),
   productId: integer("product_id").references(() => products.id).notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(), // Store-specific price
-  cost: decimal("cost", { precision: 10, scale: 2 }), // Store-specific cost
-  stock: integer("stock").default(0), // Store-specific stock
-  minStock: integer("min_stock").default(0), // Store-specific minimum stock level
-  maxStock: integer("max_stock").default(0), // Store-specific maximum stock level
+  costPrice: decimal("cost_price", { precision: 10, scale: 2 }), // Store-specific cost (actual DB column name)
+  stockQuantity: decimal("stock_quantity", { precision: 10, scale: 2 }), // Store-specific stock (actual DB column name)
+  reorderLevel: decimal("reorder_level", { precision: 10, scale: 2 }), // Store-specific reorder level (actual DB column name)
   isActive: boolean("is_active").default(true), // Whether this product is active in this store
-  lastRestockDate: timestamp("last_restock_date"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { usePOSStore } from "@/lib/pos-store";
 import { Button } from "@/components/ui/button";
 import { Trash2, Plus, Minus, AlertTriangle } from "lucide-react";
@@ -35,7 +35,7 @@ export default function CartTable() {
     return () => {
       window.removeEventListener('outOfStock', handleOutOfStock as EventListener);
     };
-  }, [toast]);
+  }, []);
 
   // Fetch real-time stock for items in cart
   const productIds = filteredCartItems
@@ -57,6 +57,16 @@ export default function CartTable() {
 
   // Track last adjustment to prevent infinite loops
   const lastAdjustmentRef = useRef<string>("");
+
+  // Create a stable signature for cart items to avoid infinite loops
+  const cartSignature = useMemo(() => {
+    return cartItems.map(item => `${item.productId}-${item.quantity}`).join("|");
+  }, [cartItems]);
+
+  // Create a stable signature for product stock
+  const productsSignature = useMemo(() => {
+    return products.map((p: any) => `${p.id}-${p.stock ?? p.quantity ?? 0}`).join("|");
+  }, [products]);
 
   // Dynamically cap visible rows to 5 and enable scrolling for more
   const tableRef = useRef<HTMLTableElement | null>(null);
@@ -86,16 +96,16 @@ export default function CartTable() {
   useEffect(() => {
     if (products.length === 0 || cartItems.length === 0) return;
     
-    // Create a signature for this check to avoid duplicate adjustments
-    const cartSignature = cartItems.map(item => `${item.productId}-${item.quantity}`).join("|");
-    const productsSignature = products.map((p: any) => `${p.id}-${p.stock ?? p.quantity}`).join("|");
+    // Create combined signature
     const signature = `${cartSignature}|${productsSignature}`;
     
     // Skip if we've already processed this exact state
     if (lastAdjustmentRef.current === signature) return;
     
+    // Mark as processed immediately to prevent re-entry
+    lastAdjustmentRef.current = signature;
+    
     // Check each cart item and adjust if quantity exceeds stock
-    let hasAdjustments = false;
     cartItems.forEach(item => {
       if (item.productId !== null) {
         const currentStock = stockMap.get(item.productId!);
@@ -107,17 +117,10 @@ export default function CartTable() {
             description: `${item.name} quantity adjusted to ${currentStock} (available stock: ${currentStock})`,
             variant: "destructive",
           });
-          hasAdjustments = true;
         }
       }
     });
-    
-    // Update signature only if we made adjustments (to allow re-checking after adjustment)
-    if (!hasAdjustments) {
-      lastAdjustmentRef.current = signature;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, cartItems]);
+  }, [cartSignature, productsSignature, products.length, cartItems.length]);
 
   const handleQuantityIncrease = (productId: number | null, sku: string) => {
     const item = cartItems.find((item) => 

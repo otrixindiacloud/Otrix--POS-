@@ -27,6 +27,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const { data: stores = [], isLoading } = useQuery<Store[]>({
     queryKey: ["/api/stores/active"],
     enabled: !!user,
+    retry: 3,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    onSuccess: (data) => {
+      console.log('[useStore] Fetched stores:', data.length, 'stores');
+    },
+    onError: (error) => {
+      console.error('[useStore] Failed to fetch stores:', error);
+    },
   });
 
   const persistDefaultStore = useCallback(async (storeId: number | null) => {
@@ -52,52 +60,71 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Enhanced store switching with VAT recalculation
   const handleStoreChange = useCallback((store: Store | null) => {
-    const currentStoreId = currentStore?.id ?? null;
-    const nextStoreId = store?.id ?? null;
+    setCurrentStore((prevStore) => {
+      const currentStoreId = prevStore?.id ?? null;
+      const nextStoreId = store?.id ?? null;
 
-    if (currentStoreId === nextStoreId) {
-      return;
-    }
+      if (currentStoreId === nextStoreId) {
+        console.log('[useStore] Store unchanged, skipping update');
+        return prevStore; // Return same reference to prevent re-render
+      }
 
-    console.log('Switching store from', currentStore?.name, 'to:', store?.name);
-    setCurrentStore(store);
-    
-    // Persist to localStorage
-    if (store) {
-      localStorage.setItem('selectedStore', JSON.stringify(store));
-    } else {
-      localStorage.removeItem('selectedStore');
-    }
-
-    // Persist selection server-side for cross-device continuity
-    void persistDefaultStore(store ? store.id : null);
-    
-    // Trigger VAT recalculation when store changes
-    if (store) {
-      // Force refresh of VAT-related queries
-      // This will be picked up by the POS system to recalculate prices
-      const event = new CustomEvent('storeChanged', { 
-        detail: { storeId: store.id, storeName: store.name } 
-      });
-      window.dispatchEvent(event);
+      console.log('[useStore] Switching store from', prevStore?.name, '(id:', currentStoreId, ') to:', store?.name, '(id:', nextStoreId, ')');
       
-      // Also clear any cached queries that depend on store
-      const clearCacheEvent = new CustomEvent('clearStoreCache');
-      window.dispatchEvent(clearCacheEvent);
+      // Persist to localStorage
+      if (store) {
+        localStorage.setItem('selectedStore', JSON.stringify(store));
+        console.log('[useStore] Saved store to localStorage');
+      } else {
+        localStorage.removeItem('selectedStore');
+        console.log('[useStore] Removed store from localStorage');
+      }
+
+      // Persist selection server-side for cross-device continuity
+      void persistDefaultStore(store ? store.id : null);
       
-      // Don't force page refresh - let React handle the state changes
-      console.log('Store changed to:', store.name);
-    }
-  }, [currentStore?.id, currentStore?.name, persistDefaultStore]); // More specific dependencies to prevent loops
+      // Trigger VAT recalculation when store changes
+      if (store) {
+        // Force refresh of VAT-related queries
+        // This will be picked up by the POS system to recalculate prices
+        const event = new CustomEvent('storeChanged', { 
+          detail: { storeId: store.id, storeName: store.name } 
+        });
+        window.dispatchEvent(event);
+        console.log('[useStore] Dispatched storeChanged event');
+        
+        // Also clear any cached queries that depend on store
+        const clearCacheEvent = new CustomEvent('clearStoreCache');
+        window.dispatchEvent(clearCacheEvent);
+        console.log('[useStore] Dispatched clearStoreCache event');
+        
+        // Don't force page refresh - let React handle the state changes
+        console.log('[useStore] Store change complete:', store.name);
+      }
+      
+      return store; // Return new store
+    });
+  }, [persistDefaultStore]); // Remove currentStore from deps - using functional update instead
 
   // Set default store when stores are loaded
   useEffect(() => {
+    console.log('[useStore] Store initialization effect triggered:', {
+      hasUser: !!user,
+      isLoading,
+      storesCount: stores.length,
+      currentStoreId: currentStore?.id,
+      userDefaultStoreId: user?.defaultStoreId
+    });
+
     if (!user || isLoading) {
+      console.log('[useStore] Skipping initialization: user or stores loading');
       return;
     }
 
     if (stores.length === 0) {
+      console.warn('[useStore] No stores available');
       if (currentStore) {
+        console.log('[useStore] Clearing current store');
         handleStoreChange(null);
       }
       return;
@@ -106,8 +133,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (currentStore) {
       const storeExists = stores.some((store) => store.id === currentStore.id);
       if (storeExists) {
+        console.log('[useStore] Current store still valid:', currentStore.name);
         return;
       }
+      console.warn('[useStore] Current store no longer exists:', currentStore.id);
     }
 
     const defaultStore = user.defaultStoreId
@@ -115,15 +144,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       : undefined;
 
     if (defaultStore) {
+      console.log('[useStore] Setting user default store:', defaultStore.name);
       handleStoreChange(defaultStore);
       return;
     }
 
     const fallbackStore = stores[0];
     if (fallbackStore) {
+      console.log('[useStore] Setting fallback store (first available):', fallbackStore.name);
       handleStoreChange(fallbackStore);
     }
-  }, [stores, user, isLoading, handleStoreChange]); // Include handleStoreChange now that it has stable deps
+  }, [stores, user, isLoading, currentStore]); // Removed handleStoreChange from dependencies
 
   const value: StoreContextType = {
     currentStore,

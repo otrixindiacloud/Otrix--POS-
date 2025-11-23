@@ -89,8 +89,19 @@ export async function apiRequest<T = any>(
   }
   
   const controller = new AbortController();
-  // Increase timeout for logout requests and add better error handling
-  const timeout = requestUrl.includes('/logout') ? 15000 : 10000;
+  // Increase timeout for specific requests that may take longer
+  let timeout = 10000; // Default 10 seconds
+  
+  if (requestUrl.includes('/logout')) {
+    timeout = 15000; // 15 seconds for logout
+  } else if (requestUrl.includes('/api/transactions') && method === 'POST') {
+    timeout = 30000; // 30 seconds for creating transactions (includes stock updates, items processing, etc.)
+  } else if (requestUrl.includes('/api/transactions') && (method === 'PUT' || method === 'PATCH')) {
+    timeout = 25000; // 25 seconds for updating transactions
+  } else if (requestUrl.includes('/generate-invoice') || requestUrl.includes('/pdf')) {
+    timeout = 20000; // 20 seconds for generating PDFs/invoices
+  }
+  
   const timeoutId = setTimeout(() => {
     controller.abort();
   }, timeout);

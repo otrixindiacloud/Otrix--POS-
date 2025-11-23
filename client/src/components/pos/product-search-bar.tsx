@@ -6,6 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { BarcodeScanner } from "@/components/ui/barcode-scanner";
 import CartTable from "@/components/pos/cart-table";
 import ReduceItemModal from "@/components/pos/reduce-item-modal";
@@ -14,6 +22,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { safePaymentMethod, safeCurrencyFormat } from "@/lib/error-handler";
 import type { Transaction } from "@shared/schema";
+import { MdEmail, MdWhatsapp } from "react-icons/md";
 import {
   Camera,
   Search,
@@ -52,13 +61,14 @@ export default function ProductSearchBar({
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [showReduceItemModal, setShowReduceItemModal] = useState(false);
+  const [showAllTransactionsModal, setShowAllTransactionsModal] = useState(false);
   const { addToCart } = usePOSStore();
   const { toast } = useToast();
   const { currentStore } = useStore();
   const searchQueryRef = useRef(searchQuery);
   const processedBarcodeRef = useRef<string | null>(null);
   const [recentTransactionsPage, setRecentTransactionsPage] = useState(1);
-  const itemsPerPage = 3;
+  const itemsPerPage = 4;
 
   // Keep ref in sync with searchQuery
   useEffect(() => {
@@ -372,6 +382,134 @@ export default function ProductSearchBar({
     }
   };
 
+  const handleShareWhatsApp = async (transaction: any) => {
+    try {
+      toast({
+        title: "Preparing for WhatsApp",
+        description: "Generating receipt for WhatsApp sharing...",
+      });
+
+      // Fetch transaction details
+      const [transactionDetailsResponse, transactionItemsResponse] = await Promise.all([
+        apiRequest({
+          url: `/api/transactions/${transaction.id}`,
+          method: "GET",
+        }),
+        apiRequest({
+          url: `/api/transactions/${transaction.id}/items`,
+          method: "GET",
+        })
+      ]);
+
+      const transactionDetails = await transactionDetailsResponse.json();
+      const transactionItems = await transactionItemsResponse.json();
+
+      // Fetch customer details if customerId exists
+      let customerDetails = null;
+      const txDetails = transactionDetails as any;
+      if (txDetails.customerId) {
+        try {
+          const customerResponse = await apiRequest({
+            url: `/api/customers/${txDetails.customerId}`,
+            method: "GET",
+          });
+          customerDetails = await customerResponse.json();
+        } catch (error) {
+          console.log("Could not fetch customer details:", error);
+        }
+      }
+
+      // Generate receipt text for WhatsApp
+      const receiptText = generateReceiptText(txDetails, transactionItems || [], customerDetails);
+      
+      // Get customer phone number or prompt for it
+      let phoneNumber = customerDetails?.phone || "";
+      
+      // Create WhatsApp link
+      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(receiptText)}`;
+      
+      // Open WhatsApp in new window
+      window.open(whatsappUrl, '_blank');
+      
+      toast({
+        title: "WhatsApp Opened",
+        description: "Receipt is ready to send via WhatsApp.",
+      });
+    } catch (error) {
+      console.error("Error sharing via WhatsApp:", error);
+      toast({
+        title: "WhatsApp Error",
+        description: "Failed to open WhatsApp. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleShareEmail = async (transaction: any) => {
+    try {
+      toast({
+        title: "Preparing for Email",
+        description: "Generating receipt for email...",
+      });
+
+      // Fetch transaction details
+      const [transactionDetailsResponse, transactionItemsResponse] = await Promise.all([
+        apiRequest({
+          url: `/api/transactions/${transaction.id}`,
+          method: "GET",
+        }),
+        apiRequest({
+          url: `/api/transactions/${transaction.id}/items`,
+          method: "GET",
+        })
+      ]);
+
+      const transactionDetails = await transactionDetailsResponse.json();
+      const transactionItems = await transactionItemsResponse.json();
+
+      // Fetch customer details if customerId exists
+      let customerDetails = null;
+      const txDetails = transactionDetails as any;
+      if (txDetails.customerId) {
+        try {
+          const customerResponse = await apiRequest({
+            url: `/api/customers/${txDetails.customerId}`,
+            method: "GET",
+          });
+          customerDetails = await customerResponse.json();
+        } catch (error) {
+          console.log("Could not fetch customer details:", error);
+        }
+      }
+
+      // Generate receipt text for email
+      const receiptText = generateReceiptText(txDetails, transactionItems || [], customerDetails);
+      
+      // Get customer email
+      const customerEmail = customerDetails?.email || "";
+      
+      // Create email link
+      const subject = `Receipt for Transaction ${txDetails.transactionNumber}`;
+      const body = receiptText;
+      const mailtoUrl = `mailto:${customerEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      
+      // Open email client
+      window.location.href = mailtoUrl;
+      
+      toast({
+        title: "Email Client Opened",
+        description: "Receipt is ready to send via email.",
+      });
+    } catch (error) {
+      console.error("Error sharing via email:", error);
+      toast({
+        title: "Email Error",
+        description: "Failed to open email client. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handlePrintBill = async (transaction: any) => {
     try {
       // Show loading toast
@@ -471,6 +609,64 @@ export default function ProductSearchBar({
         variant: "destructive",
       });
     }
+  };
+
+  const generateReceiptText = (transaction: any, items: any[], customer: any = null) => {
+    const storeName = currentStore?.name || "POS System";
+    const storeAddress = currentStore?.address || "";
+    const storePhone = currentStore?.phone || "";
+    
+    let receipt = `*${storeName}*\n`;
+    if (storeAddress) receipt += `${storeAddress}\n`;
+    if (storePhone) receipt += `${storePhone}\n`;
+    receipt += `\n================================\n`;
+    receipt += `*RECEIPT*\n`;
+    receipt += `================================\n\n`;
+    
+    receipt += `Transaction: ${transaction.transactionNumber}\n`;
+    receipt += `Date: ${formatDisplayDate(transaction.createdAt)}\n`;
+    
+    if (customer) {
+      receipt += `Customer: ${customer.name}\n`;
+      if (customer.phone) receipt += `Phone: ${customer.phone}\n`;
+    } else {
+      receipt += `Customer: Walk-in\n`;
+    }
+    
+    receipt += `Payment: ${safePaymentMethod(transaction.paymentMethod)}\n`;
+    receipt += `\n================================\n`;
+    receipt += `*ITEMS*\n`;
+    receipt += `================================\n\n`;
+    
+    items.forEach((item: any) => {
+      const itemName = item.productName || item.name || 'Unknown Item';
+      const qty = item.quantity || 0;
+      const price = parseFloat(String(item.price || 0)).toFixed(2);
+      const total = parseFloat(String(item.total || 0)).toFixed(2);
+      
+      receipt += `${itemName}\n`;
+      receipt += `  ${qty} x QR ${price} = QR ${total}\n`;
+    });
+    
+    receipt += `\n================================\n`;
+    
+    const subtotal = parseFloat(String(transaction.subtotal || 0)).toFixed(2);
+    const vatAmount = parseFloat(String(transaction.vatAmount || 0)).toFixed(2);
+    const discount = parseFloat(String(transaction.discount || 0)).toFixed(2);
+    const total = parseFloat(String(transaction.total || 0)).toFixed(2);
+    
+    receipt += `Subtotal: QR ${subtotal}\n`;
+    if (parseFloat(vatAmount) > 0) {
+      receipt += `VAT: QR ${vatAmount}\n`;
+    }
+    if (parseFloat(discount) > 0) {
+      receipt += `Discount: QR ${discount}\n`;
+    }
+    receipt += `\n*TOTAL: QR ${total}*\n`;
+    receipt += `\n================================\n`;
+    receipt += `\nThank you for your business!\n`;
+    
+    return receipt;
   };
 
   const generateEnhancedReceiptHTML = (transaction: any, items: any[], customer: any = null) => {
@@ -910,35 +1106,18 @@ export default function ProductSearchBar({
           <Label className="text-sm font-semibold text-foreground">
             Recent Transactions
           </Label>
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold text-white bg-blue-600 px-2 py-1 rounded-md">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground">
               Total: {recentTransactions.length}
             </span>
-            {recentTransactions.length > itemsPerPage && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRecentTransactionsPage(prev => Math.max(1, prev - 1))}
-                  disabled={safePage <= 1}
-                  className="h-7 w-7 p-0"
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  {safePage} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRecentTransactionsPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={safePage >= totalPages}
-                  className="h-7 w-7 p-0"
-                >
-                  <ChevronRight className="w-3 h-3" />
-                </Button>
-              </div>
-            )}
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setShowAllTransactionsModal(true)}
+              className="h-8 px-3"
+            >
+              View All
+            </Button>
           </div>
         </div>
         
@@ -995,6 +1174,24 @@ export default function ProductSearchBar({
                   <Button
                     size="sm"
                     variant="outline"
+                    onClick={() => handleShareWhatsApp(transaction)}
+                    className="h-8 px-2"
+                    title="Share via WhatsApp"
+                  >
+                    <MdWhatsapp className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleShareEmail(transaction)}
+                    className="h-8 px-2"
+                    title="Share via Email"
+                  >
+                    <MdEmail className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => handlePrintBill(transaction)}
                     className="h-8 px-2"
                     title="Print receipt"
@@ -1020,6 +1217,102 @@ export default function ProductSearchBar({
         isOpen={showReduceItemModal}
         onClose={() => setShowReduceItemModal(false)}
       />
+
+      {/* All Transactions Modal */}
+      <Dialog open={showAllTransactionsModal} onOpenChange={setShowAllTransactionsModal}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>All Transactions</DialogTitle>
+            <DialogDescription>
+              Total: {recentTransactions.length} transactions
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh] pr-4">
+            {transactionsLoading ? (
+              <div className="space-y-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="animate-pulse bg-slate-100 rounded p-3 h-20"></div>
+                ))}
+              </div>
+            ) : recentTransactions.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No transactions found</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentTransactions.map((transaction: any, index: number) => (
+                  <div
+                    key={transaction.id ?? transaction.transactionNumber ?? index}
+                    className="flex items-center justify-between p-3 border rounded hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm truncate">
+                          {transaction.transactionNumber}
+                        </span>
+                        <Badge 
+                          variant={transaction.status === 'completed' ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {transaction.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-slate-600">
+                        <span className="flex items-center gap-1">
+                          <User className="w-4 h-4" />
+                          {transaction.customer?.name || 'Walk-in'}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Coins className="w-4 h-4" />
+                          QR {parseFloat(String(transaction.total || 0)).toFixed(2)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <CreditCard className="w-4 h-4" />
+                          {safePaymentMethod(transaction.paymentMethod)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-sm text-slate-500 mt-1">
+                        <Clock className="w-4 h-4" />
+                        {formatDisplayDate(transaction.createdAt)}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 ml-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleShareWhatsApp(transaction)}
+                        className="h-9 px-2"
+                        title="Share via WhatsApp"
+                      >
+                        <MdWhatsapp className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleShareEmail(transaction)}
+                        className="h-9 px-2"
+                        title="Share via Email"
+                      >
+                        <MdEmail className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handlePrintBill(transaction)}
+                        className="h-9 px-2"
+                        title="Print receipt"
+                      >
+                        <Printer className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

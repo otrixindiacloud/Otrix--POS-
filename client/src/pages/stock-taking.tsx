@@ -288,26 +288,55 @@ export default function StockTaking() {
       } else {
         // Product not found in local system - try external barcode databases
         let externalProduct = null;
+        let sourceName = "";
         try {
           toast({
             title: "🔍 Searching online...",
-            description: "Looking up barcode in global databases",
+            description: "Looking up barcode in GO-UPC and other databases",
           });
           
-          // Try Open Food Facts first
-          const openFoodResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${scanInput}.json`);
-          if (openFoodResponse.ok) {
-            const openFoodData = await openFoodResponse.json();
-            if (openFoodData.status === 1 && openFoodData.product) {
-              externalProduct = {
-                name: openFoodData.product.product_name || openFoodData.product.product_name_en || "",
-                description: openFoodData.product.generic_name || openFoodData.product.categories || "",
-                brand: openFoodData.product.brands || "",
-              };
+          // Try GO-UPC API first (most comprehensive)
+          try {
+            const goUpcResponse = await fetch(`https://go-upc.com/api/v1/code/${scanInput}`);
+            console.log("GO-UPC Response Status:", goUpcResponse.status);
+            
+            if (goUpcResponse.ok) {
+              const goUpcData = await goUpcResponse.json();
+              console.log("GO-UPC Data:", goUpcData);
+              
+              // Handle GO-UPC response format
+              if (goUpcData && goUpcData.codeType && goUpcData.product) {
+                sourceName = "GO-UPC";
+                externalProduct = {
+                  name: goUpcData.product.name || goUpcData.product.title || "",
+                  description: goUpcData.product.description || goUpcData.product.category || "",
+                  brand: goUpcData.product.brand || "",
+                };
+              }
+            } else {
+              console.log("GO-UPC returned non-OK status:", goUpcResponse.status);
+            }
+          } catch (goUpcError) {
+            console.log("Could not fetch from GO-UPC:", goUpcError);
+          }
+          
+          // If not found in GO-UPC, try Open Food Facts
+          if (!externalProduct || !externalProduct.name) {
+            const openFoodResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${scanInput}.json`);
+            if (openFoodResponse.ok) {
+              const openFoodData = await openFoodResponse.json();
+              if (openFoodData.status === 1 && openFoodData.product) {
+                sourceName = "Open Food Facts";
+                externalProduct = {
+                  name: openFoodData.product.product_name || openFoodData.product.product_name_en || "",
+                  description: openFoodData.product.generic_name || openFoodData.product.categories || "",
+                  brand: openFoodData.product.brands || "",
+                };
+              }
             }
           }
 
-          // If not found in Open Food Facts, try UPC Item DB
+          // If still not found, try UPC Item DB
           if (!externalProduct || !externalProduct.name) {
             try {
               const upcResponse = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${scanInput}`);
@@ -315,6 +344,7 @@ export default function StockTaking() {
                 const upcData = await upcResponse.json();
                 if (upcData.code === "OK" && upcData.items && upcData.items.length > 0) {
                   const item = upcData.items[0];
+                  sourceName = "UPC Item DB";
                   externalProduct = {
                     name: item.title || "",
                     description: item.description || item.category || "",
@@ -348,10 +378,10 @@ export default function StockTaking() {
         setItems([...items, newItem]);
         setScanInput("");
         toast({
-          title: externalProduct ? "✅ Product Found Online!" : "⚠️ Product Not Found",
+          title: externalProduct ? `✅ Found on ${sourceName}!` : "⚠️ Product Not Found",
           description: externalProduct 
-            ? `${newItem.name} - Auto-filled from barcode database. Please verify and set prices.`
-            : "Product not found in system or online. Please enter product details.",
+            ? `${newItem.name} - Auto-filled from ${sourceName}. Please verify and set prices.`
+            : `Product not found. You can check https://go-upc.com/search?q=${scanInput} or enter details manually.`,
           variant: externalProduct ? "default" : "destructive",
         });
       }
@@ -635,21 +665,50 @@ export default function StockTaking() {
       } else {
         // Product not found in system - try external barcode databases
         let externalProduct = null;
+        let sourceName = "";
         try {
-          // Try Open Food Facts first
-          const openFoodResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-          if (openFoodResponse.ok) {
-            const openFoodData = await openFoodResponse.json();
-            if (openFoodData.status === 1 && openFoodData.product) {
-              externalProduct = {
-                name: openFoodData.product.product_name || openFoodData.product.product_name_en || "",
-                description: openFoodData.product.generic_name || openFoodData.product.categories || "",
-                brand: openFoodData.product.brands || "",
-              };
+          // Try GO-UPC API first (most comprehensive)
+          try {
+            const goUpcResponse = await fetch(`https://go-upc.com/api/v1/code/${barcode}`);
+            console.log("GO-UPC Response Status:", goUpcResponse.status);
+            
+            if (goUpcResponse.ok) {
+              const goUpcData = await goUpcResponse.json();
+              console.log("GO-UPC Data:", goUpcData);
+              
+              // Handle GO-UPC response format
+              if (goUpcData && goUpcData.codeType && goUpcData.product) {
+                sourceName = "GO-UPC";
+                externalProduct = {
+                  name: goUpcData.product.name || goUpcData.product.title || "",
+                  description: goUpcData.product.description || goUpcData.product.category || "",
+                  brand: goUpcData.product.brand || "",
+                };
+              }
+            } else {
+              console.log("GO-UPC returned non-OK status:", goUpcResponse.status);
+            }
+          } catch (goUpcError) {
+            console.log("Could not fetch from GO-UPC:", goUpcError);
+          }
+          
+          // If not found in GO-UPC, try Open Food Facts
+          if (!externalProduct || !externalProduct.name) {
+            const openFoodResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+            if (openFoodResponse.ok) {
+              const openFoodData = await openFoodResponse.json();
+              if (openFoodData.status === 1 && openFoodData.product) {
+                sourceName = "Open Food Facts";
+                externalProduct = {
+                  name: openFoodData.product.product_name || openFoodData.product.product_name_en || "",
+                  description: openFoodData.product.generic_name || openFoodData.product.categories || "",
+                  brand: openFoodData.product.brands || "",
+                };
+              }
             }
           }
 
-          // If not found in Open Food Facts, try UPC Item DB
+          // If still not found, try UPC Item DB
           if (!externalProduct || !externalProduct.name) {
             try {
               const upcResponse = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`);
@@ -657,6 +716,7 @@ export default function StockTaking() {
                 const upcData = await upcResponse.json();
                 if (upcData.code === "OK" && upcData.items && upcData.items.length > 0) {
                   const item = upcData.items[0];
+                  sourceName = "UPC Item DB";
                   externalProduct = {
                     name: item.title || "",
                     description: item.description || item.category || "",
@@ -699,10 +759,10 @@ export default function StockTaking() {
         }, 50);
         
         toast({
-          title: externalProduct ? "✅ Product Found Online!" : "⚠️ Product Not Found",
+          title: externalProduct ? `✅ Found on ${sourceName}!` : "⚠️ Product Not Found",
           description: externalProduct 
-            ? `${newItem.name} - Auto-filled from barcode database. Please verify and set prices.`
-            : `Barcode ${barcode} not in system or online. Please enter product details.`,
+            ? `${newItem.name} - Auto-filled from ${sourceName}. Please verify and set prices.`
+            : `Barcode ${barcode} not found. You can check https://go-upc.com/search?q=${barcode} or enter details manually.`,
           variant: externalProduct ? "default" : "destructive",
         });
       }

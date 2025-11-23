@@ -13,6 +13,7 @@ interface StockAlertProps {
 
 export function StockAlert({ lowStockProducts, onDismiss }: StockAlertProps) {
   const [isDismissed, setIsDismissed] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   if (isDismissed || lowStockProducts.length === 0) {
     return null;
@@ -37,7 +38,7 @@ export function StockAlert({ lowStockProducts, onDismiss }: StockAlertProps) {
     return aQty - bQty;
   });
 
-  const displayedProducts = sortedProducts.slice(0, 3);
+  const displayedProducts = isExpanded ? sortedProducts : sortedProducts.slice(0, 3);
 
   return (
     <Alert variant="destructive" className="mb-6 border-amber-300 dark:border-amber-700">
@@ -45,23 +46,11 @@ export function StockAlert({ lowStockProducts, onDismiss }: StockAlertProps) {
         <div className="flex items-start gap-3 flex-1">
           <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <AlertTitle className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2">
-                <span>Stock Alert</span>
-                <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                  {lowStockProducts.length} {lowStockProducts.length === 1 ? 'item' : 'items'}
-                </Badge>
-              </div>
-              <Link href="/inventory?filter=low-stock">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800 hover:text-amber-900 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 dark:border-amber-800 dark:text-amber-200"
-                >
-                  View All Items ({lowStockProducts.length})
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
+            <AlertTitle className="flex items-center gap-2 mb-2">
+              <span>Stock Alert</span>
+              <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                {lowStockProducts.length} {lowStockProducts.length === 1 ? 'item' : 'items'}
+              </Badge>
             </AlertTitle>
             <AlertDescription className="space-y-3">
               <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -121,6 +110,40 @@ export function StockAlert({ lowStockProducts, onDismiss }: StockAlertProps) {
                         </div>
                       );
                     })}
+                  </div>
+
+                  {sortedProducts.length > 3 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsExpanded(!isExpanded)}
+                      className="w-full mt-2 text-amber-700 hover:text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:text-amber-200 dark:hover:bg-amber-950/30"
+                    >
+                      {isExpanded ? (
+                        <>
+                          Show Less
+                          <ChevronRight className="h-4 w-4 ml-2 rotate-90" />
+                        </>
+                      ) : (
+                        <>
+                          Show {sortedProducts.length - 3} More
+                          <ChevronRight className="h-4 w-4 ml-2 -rotate-90" />
+                        </>
+                      )}
+                    </Button>
+                  )}
+
+                  <div className="pt-2 border-t border-amber-200 dark:border-amber-800">
+                    <Link href="/inventory?filter=low-stock">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800 hover:text-amber-900 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 dark:border-amber-800 dark:text-amber-200"
+                      >
+                        View All Items ({lowStockProducts.length})
+                        <ChevronRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               )}

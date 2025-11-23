@@ -68,15 +68,23 @@ export default function SupplierUploadModal({ isOpen, onClose }: SupplierUploadM
       const response = await fetch('/api/suppliers/parse-upload', {
         method: 'POST',
         body: formData,
+        credentials: 'include', // Include credentials for authenticated requests
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        console.error("❌ Parse error response:", data);
-        throw new Error(data.message || 'Failed to parse file');
+        // Try to get error details from response
+        let errorMessage = 'Failed to parse file';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch {
+          errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        console.error("❌ Parse error response:", errorMessage);
+        throw new Error(errorMessage);
       }
 
+      const data = await response.json();
       console.log("✅ Parsed suppliers:", data.suppliers?.length || 0);
       
       if (!data.suppliers || data.suppliers.length === 0) {
@@ -97,6 +105,8 @@ export default function SupplierUploadModal({ isOpen, onClose }: SupplierUploadM
           errorMessage = "File must contain a header row and at least one data row.";
         } else if (error.message.includes("No valid supplier")) {
           errorMessage = "No valid supplier data found. Please check that your file has data rows with required fields filled.";
+        } else if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+          errorMessage = "Network error: Unable to connect to the server. Please check your connection and try again.";
         } else if (error.message) {
           errorMessage = error.message;
         }
@@ -124,21 +134,19 @@ export default function SupplierUploadModal({ isOpen, onClose }: SupplierUploadM
       for (let i = 0; i < previewData.length; i++) {
         const supplier = previewData[i];
         try {
-          await apiRequest({
-            url: '/api/suppliers',
-            method: 'POST',
-            body: {
-              name: supplier.name,
-              contactPerson: supplier.contactPerson,
-              email: supplier.email,
-              phone: supplier.phone,
-              address: supplier.address || '',
-              notes: supplier.notes || '',
-            },
+          const response = await apiRequest('POST', '/api/suppliers', {
+            name: supplier.name,
+            contactPerson: supplier.contactPerson,
+            email: supplier.email,
+            phone: supplier.phone,
+            address: supplier.address || '',
+            notes: supplier.notes || '',
           });
 
+          await response.json(); // Ensure response is consumed
           results.push({ ...supplier, status: 'success' });
         } catch (error: any) {
+          console.error(`Failed to create supplier ${supplier.name}:`, error);
           results.push({ 
             ...supplier, 
             status: 'error', 
@@ -165,7 +173,7 @@ export default function SupplierUploadModal({ isOpen, onClose }: SupplierUploadM
       console.error('Upload error:', error);
       toast({
         title: "Upload Failed",
-        description: "An error occurred during upload. Please try again.",
+        description: error instanceof Error ? error.message : "An error occurred during upload. Please try again.",
         variant: "destructive",
       });
     } finally {

@@ -23,6 +23,7 @@ import { useState } from "react";
 import { Search, Plus, CreditCard, User, Edit, Mail, Phone, MapPin, Coins, Upload, Eye, X } from "lucide-react";
 import type { Customer } from "@shared/schema";
 import MainLayout from "@/components/layout/main-layout";
+import { useStore } from "@/hooks/useStore";
 import CustomerModal from "@/components/customers/customer-modal";
 import CreditReconciliationModal from "@/components/customers/credit-reconciliation-modal";
 import CustomerUploadModal from "@/components/customers/customer-upload-modal";
@@ -30,6 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton-loader";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 
 export default function Customers() {
+  const { currentStore } = useStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
@@ -39,8 +41,16 @@ export default function Customers() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [creditModalTab, setCreditModalTab] = useState<"new" | "history">("new");
 
+  const storeQueryParam = currentStore?.id ? `?storeId=${currentStore.id}` : "";
+
   const { data: customers = [], isLoading, refetch: refetchCustomers } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
+    queryKey: ["/api/customers", currentStore?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/customers${storeQueryParam}`);
+      if (!response.ok) throw new Error('Failed to fetch customers');
+      return response.json();
+    },
+    enabled: !!currentStore,
     refetchOnMount: true,
     staleTime: 0, // Always fetch fresh data
   });
@@ -133,6 +143,21 @@ export default function Customers() {
       </Button>
     </div>
   );
+
+  // Show message when no store is selected
+  if (!currentStore) {
+    return (
+      <MainLayout headerActions={undefined}>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center">
+          <User className="h-16 w-16 text-muted-foreground mb-4" />
+          <h2 className="text-2xl font-semibold mb-2">No Store Selected</h2>
+          <p className="text-muted-foreground mb-6 max-w-md">
+            Please select a store to view customers. Each store has its own customer list based on transaction history.
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout 

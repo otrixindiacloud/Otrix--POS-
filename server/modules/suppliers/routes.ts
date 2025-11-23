@@ -295,7 +295,8 @@ export function registerSupplierRoutes(app: Express) {
       const existingProducts = await storage.getProducts();
       const productMatches = await matchProductsWithAI(extractedData.items, existingProducts);
 
-      fsModule.unlinkSync(req.file.path);
+      // Don't delete the file - keep it for viewing and downloading
+      // fsModule.unlinkSync(req.file.path);
 
       res.json({
         extractedData,

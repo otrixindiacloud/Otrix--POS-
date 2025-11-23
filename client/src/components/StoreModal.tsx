@@ -88,8 +88,18 @@ export function StoreModal({ store, isOpen, onClose, onSubmit, isLoading }: Stor
     }
   }, [store, form]);
 
+  // Watch vatEnabled to conditionally show/enable VAT rate field
+  const vatEnabled = form.watch("vatEnabled");
+
   const handleSubmit = (data: InsertStore) => {
-    onSubmit(data);
+    // Sanitize data - convert empty defaultVatRate to "0.00"
+    const sanitizedData = {
+      ...data,
+      defaultVatRate: data.defaultVatRate && data.defaultVatRate.trim() !== "" 
+        ? data.defaultVatRate 
+        : "0.00"
+    };
+    onSubmit(sanitizedData);
   };
 
   const handleClose = () => {
@@ -285,6 +295,8 @@ export function StoreModal({ store, isOpen, onClose, onSubmit, isLoading }: Stor
                         max="100"
                         {...field}
                         value={field.value || ""}
+                        disabled={!vatEnabled}
+                        className={!vatEnabled ? "bg-muted" : ""}
                       />
                     </FormControl>
                     <FormMessage />

@@ -133,6 +133,11 @@ export default function POS() {
     setShowAIProductModal(true);
   }, []);
 
+  // Memoize currency change handler to prevent infinite loops
+  const handleCurrencyChange = useCallback((currency: string) => {
+    setCurrentCurrency(currency);
+  }, []);
+
   const storeQueryParam = currentStore?.id ? `?storeId=${currentStore.id}` : "";
 
   // Check current day operation
@@ -437,9 +442,8 @@ export default function POS() {
               <StoreSelector variant="compact" className="w-full" />
               <div className="flex flex-wrap items-center gap-2">
                 <CurrencySelector
-                  onCurrencyChange={(currency) => {
-                    setCurrentCurrency(currency);
-                  }}
+                  onCurrencyChange={handleCurrencyChange}
+                  currentCurrency={currentCurrency}
                 />
                 <PromotionIndicator />
               </div>

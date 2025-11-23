@@ -9,8 +9,25 @@ import { upload } from "../shared/upload";
 
 export function registerCustomerRoutes(app: Express) {
   app.get("/api/customers", async (req, res) => {
-    const customers = await storage.getCustomers();
-    res.json(customers);
+    try {
+      const storeId = req.query.storeId ? parseInt(req.query.storeId as string) : undefined;
+      
+      if (storeId) {
+        console.log(`[Customers API] Fetching customers for store ${storeId}`);
+        // Get customers who have made transactions at this store
+        const customers = await storage.getCustomersByStore(storeId);
+        console.log(`[Customers API] Found ${customers.length} customers for store ${storeId}`);
+        res.json(customers);
+      } else {
+        // No store filter - return all customers (backwards compatibility)
+        console.log('[Customers API] Fetching all customers (no store filter)');
+        const customers = await storage.getCustomers();
+        res.json(customers);
+      }
+    } catch (error) {
+      console.error('[Customers API] Error:', error);
+      res.status(500).json({ message: "Failed to fetch customers" });
+    }
   });
 
   app.get("/api/customers/search", async (req, res) => {

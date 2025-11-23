@@ -133,6 +133,11 @@ export default function POS() {
     setShowAIProductModal(true);
   }, []);
 
+  // Memoize currency change handler to prevent infinite loops
+  const handleCurrencyChange = useCallback((currency: string) => {
+    setCurrentCurrency(currency);
+  }, []);
+
   const storeQueryParam = currentStore?.id ? `?storeId=${currentStore.id}` : "";
 
   // Check current day operation
@@ -385,6 +390,22 @@ export default function POS() {
     };
   }, [cartItems.length]); // openPaymentModal is stable from Zustand store, no need in deps
 
+  // Show loading state while store is being selected
+  if (!currentStore) {
+    return (
+      <MainLayout title="Point of Sale" headerActions={undefined}>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center">
+          <Building2 className="h-16 w-16 text-muted-foreground mb-4" />
+          <h2 className="text-2xl font-semibold mb-2">No Store Selected</h2>
+          <p className="text-muted-foreground mb-6 max-w-md">
+            Please select a store to start using the POS system. Use the store selector in the navigation bar.
+          </p>
+          <StoreSelector variant="default" className="max-w-md" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   let pageContent: ReactNode;
 
   if (isMobile) {
@@ -437,9 +458,8 @@ export default function POS() {
               <StoreSelector variant="compact" className="w-full" />
               <div className="flex flex-wrap items-center gap-2">
                 <CurrencySelector
-                  onCurrencyChange={(currency) => {
-                    setCurrentCurrency(currency);
-                  }}
+                  onCurrencyChange={handleCurrencyChange}
+                  currentCurrency={currentCurrency}
                 />
                 <PromotionIndicator />
               </div>

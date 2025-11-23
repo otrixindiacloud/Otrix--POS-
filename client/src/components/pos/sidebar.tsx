@@ -322,7 +322,7 @@ export default function Sidebar({ onNavigate, isMobile, collapsed = false }: Sid
     const hasBadge = typeof item.badgeCount === "number" && item.badgeCount > 0;
 
     return (
-      <Tooltip key={item.label} delayDuration={0}>
+      <Tooltip key={item.label}>
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
@@ -442,7 +442,7 @@ export default function Sidebar({ onNavigate, isMobile, collapsed = false }: Sid
           )}
           <div className="flex items-center gap-2">
             {!isCollapsed && <ThemeToggle />}
-            <Tooltip delayDuration={0}>
+            <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"

@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useEffect, useMemo, useState } from "react";
-import { Search, Plus, Package, Edit, Barcode, Sparkles, AlertTriangle, Upload, Grid3X3, List, Table as TableIcon, Filter, X, SortAsc, SortDesc, Clipboard } from "lucide-react";
+import { Search, Plus, Package, Edit, Barcode, Sparkles, AlertTriangle, Upload, Grid3X3, List, Table as TableIcon, Filter, X, SortAsc, SortDesc, Clipboard, Building2 } from "lucide-react";
 import type { Product } from "@shared/schema";
 import MainLayout from "@/components/layout/main-layout";
+import { useStore } from "@/hooks/useStore";
 import { Link } from "wouter";
 import ProductModal from "@/components/inventory/product-modal";
 import AIProductModal from "@/components/inventory/ai-product-modal";
@@ -27,6 +28,7 @@ type SortOrder = 'asc' | 'desc';
 const PAGE_SIZE = 25;
 
 export default function Inventory() {
+  const { currentStore } = useStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [showProductModal, setShowProductModal] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
@@ -62,13 +64,32 @@ export default function Inventory() {
 
   const queryClient = useQueryClient();
   
+  const storeQueryParam = currentStore?.id ? `?storeId=${currentStore.id}` : "";
+  
   const { data: products = [], isLoading, refetch: refetchProducts } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
+    queryKey: ["/api/products", currentStore?.id],
+    queryFn: async () => {
+      if (!currentStore?.id) {
+        console.log('[Inventory] No store selected, returning empty products');
+        return [];
+      }
+      console.log('[Inventory] Fetching products for store:', currentStore.id, currentStore.name);
+      const response = await fetch(`/api/products${storeQueryParam}`);
+      if (!response.ok) throw new Error('Failed to fetch products');
+      const data = await response.json();
+      console.log('[Inventory] Received', data.length, 'products for store', currentStore.id);
+      return data;
+    },
+    enabled: !!currentStore,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    staleTime: 0, // Always consider data stale to ensure fresh data
   });
 
   // Listen for payment success events to refresh product stock
   useEffect(() => {
     const handlePaymentSuccess = () => {
+      console.log('[Inventory] Payment success - refreshing products');
       // Refetch products to update stock after sale
       refetchProducts();
       // Also invalidate the query to ensure fresh data
@@ -82,6 +103,39 @@ export default function Inventory() {
     };
   }, [refetchProducts, queryClient]);
 
+  // Listen for store change events to refresh inventory
+  useEffect(() => {
+    const handleStoreChanged = (event: CustomEvent) => {
+      const { storeId, storeName } = event.detail;
+      console.log('[Inventory] Store changed to:', storeName, '(id:', storeId, ') - refreshing products');
+      // Invalidate all product queries to force a refresh
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      // Reset to first page when store changes
+      setCurrentPage(1);
+    };
+
+    const handleClearStoreCache = () => {
+      console.log('[Inventory] Clear store cache event - invalidating queries');
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    };
+
+    window.addEventListener("storeChanged", handleStoreChanged as EventListener);
+    window.addEventListener("clearStoreCache", handleClearStoreCache as EventListener);
+    
+    return () => {
+      window.removeEventListener("storeChanged", handleStoreChanged as EventListener);
+      window.removeEventListener("clearStoreCache", handleClearStoreCache as EventListener);
+    };
+  }, [queryClient]);
+
+  // Force refetch when currentStore changes
+  useEffect(() => {
+    if (currentStore?.id) {
+      console.log('[Inventory] Current store changed in state to:', currentStore.id, currentStore.name, '- refetching products');
+      refetchProducts();
+    }
+  }, [currentStore?.id]);
+
   const categories = useMemo(
     () => Array.from(new Set(products.map((p: Product) => p.category).filter((c): c is string => typeof c === "string" && c.length > 0))),
     [products],
@@ -89,6 +143,14 @@ export default function Inventory() {
 
   const trimmedSearch = searchQuery.trim();
   const normalizedSearch = trimmedSearch.toLowerCase();
+
+  // Helper function to get actual stock value (prioritize stock field, fallback to quantity)
+  const getActualStock = (product: Product): number => {
+    const stock = product.stock ?? 0;
+    const quantity = product.quantity ?? 0;
+    // Return the maximum of stock and quantity to show actual available stock
+    return Math.max(stock, quantity);
+  };
 
   const filteredProducts = useMemo(() => {
     const matches = (product: Product) => {
@@ -104,7 +166,7 @@ export default function Inventory() {
 
       const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
 
-      const stock = product.stock ?? 0;
+      const stock = getActualStock(product);
       const matchesStock =
         stockFilter === "all" ||
         (stockFilter === "in-stock" && stock > 5) ||
@@ -121,7 +183,7 @@ export default function Inventory() {
         case "price":
           return Number(product.price ?? 0);
         case "quantity":
-          return product.stock ?? 0;
+          return getActualStock(product);
         case "category":
           return product.category ?? "";
         case "recent":
@@ -218,7 +280,7 @@ export default function Inventory() {
   // Calculate low stock products for alert
   const lowStockProducts = useMemo(() => {
     return products.filter((product) => {
-      const stock = product.stock || 0;
+      const stock = getActualStock(product);
       return stock <= 5; // Low stock threshold: 5 or less
     });
   }, [products]);
@@ -297,6 +359,22 @@ export default function Inventory() {
     </div>
   );
 
+  // Show message when no store is selected
+  if (!currentStore) {
+    console.log('[Inventory] No store selected - showing selection prompt');
+    return (
+      <MainLayout headerActions={undefined}>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center">
+          <Building2 className="h-16 w-16 text-muted-foreground mb-4" />
+          <h2 className="text-2xl font-semibold mb-2">No Store Selected</h2>
+          <p className="text-muted-foreground mb-6 max-w-md">
+            Please select a store to view inventory. Each store has its own product catalog and stock levels.
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout 
       headerActions={headerActions}
@@ -317,6 +395,14 @@ export default function Inventory() {
                 <p className="text-slate-600 dark:text-slate-400 mt-1 text-sm sm:text-base">
                   Manage products, stock levels, and pricing
                 </p>
+                {currentStore && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <Building2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                      {currentStore.name}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -530,7 +616,8 @@ export default function Inventory() {
             {viewMode === 'cards' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                 {filteredProducts.map((product: Product) => {
-                  const stockStatus = getStockStatus(product.stock || 0);
+                  const actualStock = getActualStock(product);
+                  const stockStatus = getStockStatus(actualStock);
                   return (
                     <Card key={product.id} className="hover:shadow-md transition-shadow">
                       <CardHeader className="pb-3">
@@ -594,7 +681,7 @@ export default function Inventory() {
                           <div className="flex justify-between">
                             <span className="text-slate-600">Stock:</span>
                             <Badge variant={stockStatus.variant} className="text-xs">
-                              {product.stock || 0} {stockStatus.label}
+                              {actualStock} {stockStatus.label}
                             </Badge>
                           </div>
                           {product.barcode && (
@@ -675,7 +762,8 @@ export default function Inventory() {
                   </TableHeader>
                   <TableBody>
                     {filteredProducts.map((product: Product) => {
-                      const stockStatus = getStockStatus(product.stock || 0);
+                      const actualStock = getActualStock(product);
+                      const stockStatus = getStockStatus(actualStock);
                       return (
                         <TableRow key={product.id} className="hover:bg-slate-50">
                           <TableCell>
@@ -709,7 +797,7 @@ export default function Inventory() {
                             ) : '-'}
                           </TableCell>
                           <TableCell className="font-medium">QR {Number(product.price || 0).toFixed(2)}</TableCell>
-                          <TableCell>{product.stock || 0} units</TableCell>
+                          <TableCell>{actualStock} units</TableCell>
                           <TableCell>
                             <Badge variant={stockStatus.variant}>
                               {stockStatus.label}
@@ -736,7 +824,8 @@ export default function Inventory() {
             {viewMode === 'list' && (
               <div className="space-y-2">
                 {filteredProducts.map((product: Product) => {
-                  const stockStatus = getStockStatus(product.stock || 0);
+                  const actualStock = getActualStock(product);
+                  const stockStatus = getStockStatus(actualStock);
                   return (
                     <Card key={product.id} className="hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
@@ -764,7 +853,7 @@ export default function Inventory() {
                                 {product.category && (
                                   <span>{getCategoryLabel(product.category)}</span>
                                 )}
-                                <span>{product.stock || 0} units</span>
+                                <span>{actualStock} units</span>
                                 {product.barcode && (
                                   <div className="flex items-center gap-1">
                                     <Barcode className="w-3 h-3" />

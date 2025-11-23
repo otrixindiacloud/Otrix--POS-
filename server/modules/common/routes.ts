@@ -19,9 +19,13 @@ export function registerCommonRoutes(app: Express) {
   app.get("/api/stores/active", isAuthenticated, async (req, res) => {
     try {
       const user = req.user as any;
+      console.log('[Stores API] Fetching active stores for user:', user?.id, 'role:', user?.role);
+      
       const stores = user?.role === "admin"
         ? await storage.getActiveStores()
         : await storage.getUserAccessibleStores(user.id);
+      
+      console.log('[Stores API] Found', stores.length, 'stores for user', user?.id);
       res.json(stores);
     } catch (error) {
       console.error("Error fetching active stores:", error);
@@ -49,7 +53,16 @@ export function registerCommonRoutes(app: Express) {
   app.post("/api/stores", isAuthenticated, requireRole([USER_ROLES.ADMIN]), async (req, res) => {
     try {
       console.log('Creating store with data:', req.body);
-      const storeData = insertStoreSchema.parse(req.body);
+      
+      // Sanitize data - convert empty strings to proper defaults
+      const sanitizedBody = {
+        ...req.body,
+        defaultVatRate: req.body.defaultVatRate && String(req.body.defaultVatRate).trim() !== "" 
+          ? req.body.defaultVatRate 
+          : "0.00"
+      };
+      
+      const storeData = insertStoreSchema.parse(sanitizedBody);
       
       // Check for unique code constraint
       if (storeData.code) {
@@ -90,8 +103,16 @@ export function registerCommonRoutes(app: Express) {
       
       console.log(`Updating store ${id} with data:`, req.body);
       
+      // Sanitize data - convert empty strings to proper defaults
+      const sanitizedBody = {
+        ...req.body,
+        defaultVatRate: req.body.defaultVatRate !== undefined && String(req.body.defaultVatRate).trim() !== "" 
+          ? req.body.defaultVatRate 
+          : "0.00"
+      };
+      
       // Validate the request body
-      const storeData = insertStoreSchema.partial().parse(req.body);
+      const storeData = insertStoreSchema.partial().parse(sanitizedBody);
       
       // Check if store exists before updating
       const existingStore = await storage.getStore(id);

@@ -35,7 +35,7 @@ export function useAuth() {
       description: "Please log in again.",
       variant: "destructive",
     });
-  }, [queryClient, toast]);
+  }, []); // queryClient and toast are stable, no need in deps
 
   // Set up global auth redirect handler and check authentication status
   useEffect(() => {

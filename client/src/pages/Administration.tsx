@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { getRoleDisplayName, getRoleBadgeColor, USER_ROLES } from "@/lib/authUtils";
-import { Shield, Users, Save, Store } from "lucide-react";
+import { Shield, Users, Save, Store, Settings, RefreshCw } from "lucide-react";
 import { UserStoreManagement } from "@/components/admin/user-store-management";
 import { AccessDenied } from "@/components/ui/access-denied";
 import MainLayout from "@/components/layout/main-layout";
@@ -60,6 +60,28 @@ export default function Administration() {
     onError: (error: Error) => {
       toast({
         title: "Failed to update role",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const syncProductsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/sync-products-to-stores", {});
+      return response.json();
+    },
+    onSuccess: (result) => {
+      toast({
+        title: "Sync completed",
+        description: `Assigned ${result.assignedCount} products to stores. Skipped ${result.skippedCount} existing assignments.`,
+      });
+      // Invalidate product queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Sync failed",
         description: error.message,
         variant: "destructive",
       });
@@ -124,6 +146,10 @@ export default function Administration() {
             <TabsTrigger value="stores" className="flex items-center gap-2">
               <Store className="h-4 w-4" />
               Store Access
+            </TabsTrigger>
+            <TabsTrigger value="system" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              System Utilities
             </TabsTrigger>
           </TabsList>
 
@@ -211,6 +237,54 @@ export default function Administration() {
 
           <TabsContent value="stores">
             <UserStoreManagement />
+          </TabsContent>
+
+          <TabsContent value="system" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Product Synchronization</CardTitle>
+                <CardDescription>
+                  Sync all products to all stores. This ensures every store has access to all products in the inventory.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <Settings className="h-5 w-5 text-yellow-600 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="font-medium text-yellow-900">Important Information</p>
+                        <ul className="mt-2 space-y-1 text-sm text-yellow-800">
+                          <li>• This will create store_product entries for all products in all stores</li>
+                          <li>• Existing assignments will be skipped (no duplicates)</li>
+                          <li>• Each store will get its own inventory tracking for each product</li>
+                          <li>• Store-specific pricing and stock levels can be set after sync</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={() => syncProductsMutation.mutate()}
+                    disabled={syncProductsMutation.isPending}
+                    className="w-full sm:w-auto"
+                    size="lg"
+                  >
+                    {syncProductsMutation.isPending ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Syncing Products...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Sync All Products to All Stores
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

@@ -243,7 +243,13 @@ export default function ProductModal({ isOpen, onClose, product }: ProductModalP
         });
       }
 
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      // Invalidate and refetch queries to ensure UI updates
+      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
+      
+      // Small delay to ensure database transaction completes
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       handleClose();
     } catch (error: any) {
       console.error("Error saving product:", error);

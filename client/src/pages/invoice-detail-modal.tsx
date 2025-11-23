@@ -576,6 +576,24 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
                         src={invoice.invoiceImageUrl} 
                         alt="Scanned Invoice" 
                         className="w-full h-64 object-contain"
+                        onError={(e) => {
+                          console.error('Image failed to load:', invoice.invoiceImageUrl);
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = `
+                              <div class="flex flex-col items-center justify-center h-64 text-amber-600 bg-amber-50 p-4">
+                                <svg class="w-16 h-16 mb-3 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                <p class="font-semibold text-center">Image file not found</p>
+                                <p class="text-sm text-slate-600 text-center mt-1">The uploaded file may have been deleted or moved</p>
+                              </div>
+                            `;
+                          }
+                        }}
+                        loading="lazy"
                       />
                     </div>
                     
@@ -593,12 +611,52 @@ export default function InvoiceDetailModal({ isOpen, onClose, invoice, supplier 
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => {
+                        onClick={async () => {
                           if (invoice.invoiceImageUrl) {
-                            const link = document.createElement('a');
-                            link.href = invoice.invoiceImageUrl;
-                            link.download = `invoice-${invoice.invoiceNumber}.jpg`;
-                            link.click();
+                            try {
+                              const response = await fetch(invoice.invoiceImageUrl);
+                              if (!response.ok) {
+                                throw new Error('Failed to fetch image');
+                              }
+                              const blob = await response.blob();
+                              
+                              // Detect file extension from URL or content type
+                              let ext = '.jpg';
+                              const urlExt = invoice.invoiceImageUrl.match(/\.(jpg|jpeg|png|gif|pdf)$/i);
+                              if (urlExt) {
+                                ext = urlExt[0];
+                              } else if (blob.type) {
+                                const typeMap: Record<string, string> = {
+                                  'image/jpeg': '.jpg',
+                                  'image/jpg': '.jpg',
+                                  'image/png': '.png',
+                                  'image/gif': '.gif',
+                                  'application/pdf': '.pdf'
+                                };
+                                ext = typeMap[blob.type] || '.jpg';
+                              }
+                              
+                              const url = window.URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.download = `invoice-${invoice.invoiceNumber}${ext}`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              window.URL.revokeObjectURL(url);
+                              
+                              toast({
+                                title: "Success",
+                                description: "Invoice image downloaded successfully",
+                              });
+                            } catch (error) {
+                              console.error('Download error:', error);
+                              toast({
+                                title: "Error",
+                                description: "Failed to download invoice image. The file may not exist.",
+                                variant: "destructive",
+                              });
+                            }
                           }
                         }}
                         className="flex items-center gap-2 border-slate-300"

@@ -864,9 +864,9 @@ export default function InvoiceWizardPage() {
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-6 p-8">
+                <CardContent className="space-y-4 p-6">
                   <div className={`
-                    border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200
+                    border-2 border-dashed rounded-xl p-6 text-center transition-all duration-200
                     ${selectedFile 
                       ? 'border-green-300 bg-green-50' 
                       : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
@@ -881,48 +881,47 @@ export default function InvoiceWizardPage() {
                     />
                     
                     {!imagePreview ? (
-                      <div className="space-y-6">
-                        <div className="mx-auto w-16 h-16 bg-purple-100 rounded-lg flex items-center justify-center">
-                          <FileImage className="w-8 h-8 text-purple-600" />
+                      <div className="space-y-4">
+                        <div className="mx-auto w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                          <FileImage className="w-6 h-6 text-purple-600" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-2 text-center">
+                          <h3 className="text-base font-semibold text-gray-900 mb-1 text-center">
                             Upload Invoice Image
                           </h3>
-                          <p className="text-sm text-gray-600 mb-4 max-w-md mx-auto text-center">
+                          <p className="text-sm text-gray-600 mb-3 max-w-md mx-auto text-center">
                             Select a clear, high-quality image of your invoice for AI-powered extraction
                           </p>
-                          <div className="inline-flex flex-col gap-1.5 text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded-lg p-3 mx-auto">
+                          <div className="inline-flex flex-col gap-1 text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded-lg p-2 mx-auto">
                             <div className="flex items-center gap-2">
-                              <Check className="h-3.5 w-3.5 text-green-600" />
+                              <Check className="h-3 w-3 text-green-600" />
                               <span>Supported: JPG, PNG, JPEG</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Check className="h-3.5 w-3.5 text-green-600" />
+                              <Check className="h-3 w-3 text-green-600" />
                               <span>Maximum size: 10MB</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Check className="h-3.5 w-3.5 text-green-600" />
+                              <Check className="h-3 w-3 text-green-600" />
                               <span>Ensure text is clearly visible</span>
                             </div>
                           </div>
                         </div>
                         <Button 
                           onClick={() => fileInputRef.current?.click()}
-                          className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3"
-                          size="lg"
+                          className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2"
                         >
                           <Upload className="w-4 h-4 mr-2" />
                           Choose File
                         </Button>
                       </div>
                     ) : (
-                      <div className="space-y-6">
+                      <div className="space-y-4">
                         <div className="relative">
                           <img 
                             src={imagePreview} 
                             alt="Invoice preview" 
-                            className="max-h-80 mx-auto rounded-lg border shadow-lg"
+                            className="max-h-60 mx-auto rounded-lg border shadow-lg"
                           />
                           <Badge 
                             className="absolute top-2 right-2 bg-green-500 text-white"
@@ -1106,7 +1105,7 @@ export default function InvoiceWizardPage() {
                       id="subtotal"
                       type="number"
                       step="0.01"
-                      value={headerDetails.subtotal}
+                      value={headerDetails.subtotal.toFixed(2)}
                       onChange={(e) => setHeaderDetails(prev => ({ ...prev, subtotal: parseFloat(e.target.value) || 0 }))}
                       placeholder="0.00"
                     />
@@ -1118,7 +1117,7 @@ export default function InvoiceWizardPage() {
                       id="tax"
                       type="number"
                       step="0.01"
-                      value={headerDetails.tax}
+                      value={headerDetails.tax.toFixed(2)}
                       onChange={(e) => setHeaderDetails(prev => ({ ...prev, tax: parseFloat(e.target.value) || 0 }))}
                       placeholder="0.00"
                     />
@@ -1130,7 +1129,7 @@ export default function InvoiceWizardPage() {
                       id="total"
                       type="number"
                       step="0.01"
-                      value={headerDetails.total}
+                      value={headerDetails.total.toFixed(2)}
                       onChange={(e) => setHeaderDetails(prev => ({ ...prev, total: parseFloat(e.target.value) || 0 }))}
                       placeholder="0.00"
                       className="font-medium text-lg"
@@ -1178,14 +1177,6 @@ export default function InvoiceWizardPage() {
                                 Scanned Item
                               </Badge>
                             )}
-                            {item.uom && (
-                              <Badge variant="outline" className="text-purple-600 bg-purple-50">
-                                {item.uom}
-                                {item.crtQty && item.pcsQty && (
-                                  <span className="ml-1 text-xs">({item.crtQty}/{item.pcsQty})</span>
-                                )}
-                              </Badge>
-                            )}
                           </div>
                           <Button
                             variant="outline"
@@ -1199,7 +1190,7 @@ export default function InvoiceWizardPage() {
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                          <div className="sm:col-span-2 lg:col-span-1">
+                          <div className="sm:col-span-2 lg:col-span-2">
                             <Label className="text-xs sm:text-sm">Product Name</Label>
                             <Input 
                               value={item.productName}
@@ -1209,14 +1200,7 @@ export default function InvoiceWizardPage() {
                             />
                           </div>
                           <div>
-                            <Label className="text-xs sm:text-sm">
-                              Quantity
-                              {item.uom && (
-                                <span className="ml-1 text-xs font-normal text-purple-600">
-                                  ({item.uom})
-                                </span>
-                              )}
-                            </Label>
+                            <Label className="text-xs sm:text-sm">Quantity</Label>
                             <Input 
                               type="number"
                               value={item.quantity}
@@ -1227,57 +1211,24 @@ export default function InvoiceWizardPage() {
                             />
                           </div>
                           <div>
-                            <Label className="text-xs sm:text-sm">
-                              CRT/PCS
-                              <span className="ml-1 text-xs font-normal text-gray-500">(packing info)</span>
-                              {item.crtQty && item.pcsQty && (
-                                <span className="ml-1 text-xs font-normal text-green-600">
-                                  ✓ Extracted
-                                </span>
-                              )}
-                            </Label>
-                            <Input 
-                              type="text"
-                              value={item.crtQty && item.pcsQty ? `${item.crtQty}/${item.pcsQty}` : ''}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                const match = value.match(/^(\d+)\/(\d+)$/);
-                                if (match) {
-                                  const crtQty = parseInt(match[1]);
-                                  const pcsQty = parseInt(match[2]);
-                                  updateItemValue(index, 'crtQty', crtQty);
-                                  updateItemValue(index, 'pcsQty', pcsQty);
-                                  // Don't auto-calculate quantity - CRT/PCS is just packing info
-                                  // updateItemValue(index, 'quantity', crtQty * pcsQty);
-                                } else if (value === '') {
-                                  updateItemValue(index, 'crtQty', null);
-                                  updateItemValue(index, 'pcsQty', null);
-                                }
-                              }}
-                              className={cn("text-sm font-mono", item.crtQty && item.pcsQty && "border-green-300 bg-green-50")}
-                              placeholder="2/24 (packing info)"
-                            />
-                            {item.crtQty && item.pcsQty && (
-                              <p className="text-[10px] text-gray-500 mt-1">
-                                📦 {item.crtQty} carton(s) × {item.pcsQty} pieces = {item.crtQty * item.pcsQty} total pcs (info only)
-                              </p>
-                            )}
-                          </div>
-                          <div>
                             <Label className="text-xs sm:text-sm">Unit Price (QR)</Label>
                             <Input 
-                              type="text"
+                              type="number"
+                              step="0.01"
                               inputMode="decimal"
-                              value={Number(item.unitPrice).toFixed(2)}
+                              value={item.unitPrice}
                               onChange={(e) => {
-                                const value = e.target.value;
-                                // Allow typing decimal values
-                                if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
-                                  updateItemValue(index, 'unitPrice', value === '' ? 0 : parseFloat(value) || 0);
-                                }
+                                const value = parseFloat(e.target.value) || 0;
+                                updateItemValue(index, 'unitPrice', value);
+                              }}
+                              onBlur={(e) => {
+                                // Format to 2 decimal places on blur
+                                const value = parseFloat(e.target.value) || 0;
+                                updateItemValue(index, 'unitPrice', parseFloat(value.toFixed(2)));
                               }}
                               className="text-sm"
                               placeholder="0.00"
+                              min="0"
                             />
                           </div>
                           <div>
@@ -1292,53 +1243,26 @@ export default function InvoiceWizardPage() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-                          <div>
-                            <Label className="text-xs sm:text-sm">
-                              UOM
-                              {item.uom && (
-                                <span className="ml-1 text-xs font-normal text-green-600">
-                                  ✓ Extracted
-                                </span>
-                              )}
-                            </Label>
-                            <Input 
-                              value={item.uom || ''}
-                              onChange={(e) => updateItemValue(index, 'uom', e.target.value.toUpperCase())}
-                              className={cn("text-sm", item.uom && "border-green-300 bg-green-50")}
-                              placeholder="CRT, PCS, BOX, etc."
-                              maxLength={10}
-                            />
-                          </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 mt-3">
                           <div>
                             <Label className="text-xs sm:text-sm">
                               SKU
-                              {item.sku && (
-                                <span className="ml-1 text-xs font-normal text-green-600">
-                                  ✓ Extracted
-                                </span>
-                              )}
                             </Label>
                             <Input 
                               value={item.sku || ''}
                               onChange={(e) => updateItemValue(index, 'sku', e.target.value)}
-                              className={cn("text-sm", item.sku && "border-green-300 bg-green-50")}
+                              className="text-sm"
                               placeholder="Optional SKU"
                             />
                           </div>
                           <div>
                             <Label className="text-xs sm:text-sm">
                               Barcode
-                              {item.barcode && (
-                                <span className="ml-1 text-xs font-normal text-green-600">
-                                  ✓ Extracted
-                                </span>
-                              )}
                             </Label>
                             <Input 
                               value={item.barcode || ''}
                               onChange={(e) => updateItemValue(index, 'barcode', e.target.value)}
-                              className={cn("text-sm", item.barcode && "border-green-300 bg-green-50")}
+                              className="text-sm"
                               placeholder="Optional barcode"
                             />
                           </div>
@@ -1360,7 +1284,7 @@ export default function InvoiceWizardPage() {
                   <Button
                     onClick={addNewItem}
                     variant="outline"
-                    className="w-full border-dashed border-2 border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400 py-6"
+                    className="w-full border-dashed border-2 border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400 hover:text-blue-800 py-6"
                   >
                     <Plus className="w-5 h-5 mr-2" />
                     Add Item Manually
@@ -1386,7 +1310,7 @@ export default function InvoiceWizardPage() {
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 <RadioGroup 
                   value={paymentStatus} 
                   onValueChange={(value: PaymentStatus) => setPaymentStatus(value)}
@@ -1450,7 +1374,7 @@ export default function InvoiceWizardPage() {
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pt-6">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 text-xs sm:text-sm">
                     <div><strong>Type:</strong> {invoiceType === 'receipt' ? 'Receipt' : 'Return'}</div>
                     <div><strong>Invoice #:</strong> {headerDetails.invoiceNumber}</div>

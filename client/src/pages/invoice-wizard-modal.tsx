@@ -121,7 +121,7 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
       setExtractedData(data.extractedData);
       setProductMatches(data.productMatches);
       
-      // Validate and ensure unit prices are correctly calculated
+      // Validate and ensure unit prices are correctly calculated and formatted
       const validatedItems = data.extractedData.items.map((item: any) => {
         const qty = Number(item.quantity) || 1;
         const total = Number(item.totalPrice) || 0;
@@ -137,6 +137,9 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
             console.log(`Frontend recalculation for "${item.productName}": ${total} ÷ ${qty} = ${unitPrice}`);
           }
         }
+        
+        // Ensure unit price is always stored with 2 decimal precision
+        unitPrice = parseFloat(unitPrice.toFixed(2));
         
         return {
           ...item,
@@ -823,7 +826,7 @@ export default function InvoiceWizardModal({ isOpen, onClose }: InvoiceWizardMod
                           <Input 
                             type="text"
                             inputMode="decimal"
-                            value={item.unitPrice ? Number(item.unitPrice).toFixed(2) : ''}
+                            value={item.unitPrice !== null && item.unitPrice !== undefined ? Number(item.unitPrice).toFixed(2) : '0.00'}
                             onChange={(e) => {
                               const value = e.target.value;
                               // Allow empty value for user to clear and re-enter

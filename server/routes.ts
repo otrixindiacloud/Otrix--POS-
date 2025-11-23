@@ -85,6 +85,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Competitor routes
   app.use('/api/competitors', isAuthenticated, competitorRoutes);
 
+  // Utility: Sync all products to all stores
+  app.post('/api/admin/sync-products-to-stores', isAuthenticated, requireRole([USER_ROLES.ADMIN]), async (req, res) => {
+    try {
+      console.log('[Sync] Starting product synchronization to stores...');
+      
+      // Fetch all active stores
+      const allStores = await storage.getActiveStores();
+      console.log(`[Sync] Found ${allStores.length} active stores`);
+
+      if (allStores.length === 0) {
+        return res.status(400).json({ message: "No active stores found" });
+      }
+
+      // Fetch all active products
+      const allProducts = await storage.getProducts();
+      console.log(`[Sync] Found ${allProducts.length} active products`);
+
+      if (allProducts.length === 0) {
+        return res.status(400).json({ message: "No active products found" });
+      }
+
+      let assignedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+
+      // For each store
+      for (const store of allStores) {
+        // For each product
+        for (const product of allProducts) {
+          try {
+            // Check if already exists
+            const existing = await storage.getStoreProduct(store.id, product.id);
+            
+            if (existing) {
+              skippedCount++;
+              continue;
+            }
+
+            // Create store product assignment
+            await storage.createStoreProduct({
+              storeId: store.id,
+              productId: product.id,
+              price: product.price || "0.00",
+              costPrice: product.cost || "0.00",
+              stockQuantity: product.stock || 0,
+              reorderLevel: 5,
+              isActive: true,
+            });
+
+            assignedCount++;
+          } catch (error) {
+            errorCount++;
+            console.error(`[Sync] Error assigning product ${product.name} to store ${store.name}:`, error);
+          }
+        }
+      }
+
+      console.log('[Sync] Synchronization completed:', { assignedCount, skippedCount, errorCount });
+      
+      res.json({
+        success: true,
+        message: "Product synchronization completed",
+        assignedCount,
+        skippedCount,
+        errorCount,
+        totalStores: allStores.length,
+        totalProducts: allProducts.length,
+      });
+    } catch (error) {
+      console.error('[Sync] Fatal error during synchronization:', error);
+      res.status(500).json({ 
+        message: "Failed to sync products to stores", 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      });
+    }
+  });
+
   // User management routes
   app.get('/api/users', isAuthenticated, requireRole([USER_ROLES.ADMIN]), async (req, res) => {
     try {
@@ -1572,8 +1649,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const existingProduct = await storage.getProductByBarcode(barcode);
           
           if (existingProduct) {
-            // Update existing product's stock
+            // Update existing product's stock and quantity
             await storage.updateProduct(existingProduct.id, {
+              stock: qty,
               quantity: qty,
               cost: cost.toString(),
               price: price.toString()
@@ -1589,6 +1667,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               barcode,
               price: price.toString(),
               cost: cost.toString(),
+              stock: qty,
               quantity: qty,
               category: "Imported",
               description: `Imported via stock upload on ${new Date().toLocaleDateString()}`

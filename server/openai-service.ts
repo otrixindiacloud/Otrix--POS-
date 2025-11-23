@@ -105,7 +105,6 @@ interface InvoiceExtractionResult {
   items: {
     productName: string;
     quantity: number;
-    uom?: string;
     crtQty?: number;
     pcsQty?: number;
     unitPrice: number;
@@ -129,31 +128,350 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
       messages: [
         {
           role: "system",
-          content: `You are an expert OCR specialist at extracting line items from ${documentType} images (scanned or photographed). Extract all relevant information and return it strictly in the JSON format requested.
+          content: `You are an expert OCR specialist at extracting line items from ${documentType} images (scanned or photographed). 
+          
+          CRITICAL: YOU MUST EXTRACT THE ACTUAL, REAL DATA FROM THE IMAGE - DO NOT MAKE UP OR HALLUCINATE DATA!
+          
+          Your task is to READ the text, numbers, and values EXACTLY as they appear in the image using visual OCR.
+          If you cannot read a value clearly, use null - NEVER guess or fabricate data.
+          
+          Extract all relevant information and return it strictly in the JSON format requested.
           
           CRITICAL COLUMN IDENTIFICATION RULES:
-          - ALWAYS examine the table header row FIRST to identify which column is which
-          - Most receipts have columns in this order: Product Name | Quantity | Unit Price | Total Price
-          - Common column headers: "Qty", "Quantity", "Q" = QUANTITY column
-          - Common column headers: "U.Price", "Unit Price", "Price", "Rate", "UP" = UNIT PRICE column  
-          - Common column headers: "Total", "Amount", "Line Total", "Amt" = TOTAL PRICE column
-          - WARNING: Do NOT confuse Total Price with Unit Price - they are different columns!
-          - WARNING: Do NOT confuse Quantity with Unit Price - they are different columns!
+          - ALWAYS examine the table header row FIRST to identify ALL columns
+          - Columns can appear in ANY ORDER - do not assume a fixed sequence
+          - IMPORTANT: Columns may be arranged as: Product | QTY CRT/PCS | CRT Price | PCS Price | Total
+          - OR they could be: Product | Total | QTY CRT/PCS | PCS Price | CRT Price
+          - OR any other combination - READ THE HEADERS to identify each column
+          
+          STEP 1: IDENTIFY ALL COLUMNS BY THEIR HEADERS (can be in any order):
+          
+          A) QUANTITY COLUMN (MOST IMPORTANT):
+             - Header is typically: "QTY", "Qty", or "Quantity"
+             - This is a SINGLE column that contains the quantity values
+             - Values INSIDE this column can be in TWO different formats:
+             
+             Format 1: Simple numbers (most common for bakery/simple items)
+               * Examples: 1, 2, 9, 12, etc.
+               * Just read the number directly
+               * Extract: quantity = the number shown
+             
+             Format 2: CRT/PCS format (for carton-based items)
+               * Examples: "2/24", "0/3", "1/0", "3/12"
+               * Format is "X/Y" where X=cartons, Y=pieces per carton
+               * The "X/Y" appears as the VALUE inside the QTY column
+               * Extract: crtQty = X (first number), pcsQty = Y (second number)
+               * Calculate quantity based on which price is used (see decision tree)
+             
+             IMPORTANT: Whether simple numbers OR "X/Y" format, BOTH are values INSIDE the QTY column
+             - Do NOT look for separate "CRT/PCS" column - it's part of the QTY values
+             - The column header is just "QTY" or "Quantity"
+             - The values themselves tell you if it's simple (9) or CRT/PCS format (2/24)
+          
+          B) PRICE COLUMNS (receipt may have MULTIPLE price columns):
+             1. "CRT Price" or "Carton Price" = Price per CARTON
+             2. "PCS Price" or "Piece Price" or "Unit Price" = Price per PIECE
+             3. "U.Price", "U Price", "U/Price", "Price", "Rate", "Base Price" = Could be either
+             - CRITICAL: Some receipts have BOTH CRT Price and PCS Price columns
+             - You need to identify which price applies to calculate the total
+          
+          C) TOTAL COLUMN:
+             - Header: "Total", "Amount", "Line Total", "Amt", "Tot", "Totl", "Line Amt"
+             - This is the final calculated amount for the line
+             - Use this to VERIFY which price column was used
+          
+          D) OTHER COLUMNS:
+             - Product/Description column
+             - SKU/Code column (if present)
+             - Barcode column (if present)
+          
+          CRITICAL: DO NOT extract or read any UOM (Unit of Measure) column
+          - Ignore columns labeled "UOM", "Unit", "U/M"
+          - Use ONLY the QTY or QTY CRT/PCS column for quantity information
+          
+          CRITICAL WARNINGS:
+          - DO NOT assume columns are in a fixed order
+          - READ each column header carefully
+          - Identify which columns exist before extracting data
+          - Some receipts have only CRT Price, some only PCS Price, some have BOTH
+          
+          CRITICAL UNIT PRICE READING INSTRUCTIONS:
+          - Unit Price is typically SMALLER than Total Price for each item
+          - Unit Price represents the price of ONE unit/piece of the product
+          - For items with quantity > 1, the Unit Price should be: Total Price ÷ Quantity
+          - Look at the column under "U.Price" or "Unit Price" header - read the value EXACTLY as shown
+          - Use high contrast and clear focus when reading numbers in the Unit Price column
+          - Pay special attention to decimal points (e.g., 22.41 vs 2.241 vs 224.1)
+          - Double-check: Does Quantity × Unit Price = Total Price? If not, you may have misread the Unit Price
+          - Common mistakes to avoid:
+            * Reading Total Price as Unit Price (Total is usually rightmost column)
+            * Misplacing decimal points (22.41 is different from 2.241)
+            * Confusing similar digits (0 vs O, 1 vs I, 5 vs S, 8 vs B)
+            * Reading from wrong column due to column misalignment
           
           IMPORTANT BEHAVIORS:
           - Extract EVERY product row that contains actual numeric values in Quantity and/or Total columns
-          - Treat both handwritten AND printed numbers as valid data
+          - Treat both HANDWRITTEN AND PRINTED numbers/text as valid data
           - Skip summary rows: "SUB TOTAL", "SUBTOTAL", "TOTAL", "GRAND TOTAL", taxes/fees summaries, section headers
           - Scan the ENTIRE image and combine all product rows from all sections into one items array
           
-          CRITICAL UOM AND CRT/PCS HANDLING:
-          - Look for UOM column (may be labeled "UOM", "Unit", "U/M") - extract the unit type (CRT, PCS, CS, BOX, etc.)
-          - Look for CRT/PCS column (separate from QTY column) showing format like "2/24":
-            * This is INFORMATIONAL ONLY - shows carton breakdown
-            * Extract: crtQty = first number, pcsQty = second number
-            * DO NOT calculate quantity from CRT/PCS - keep them separate!
-          - QTY column shows the ACTUAL quantity being purchased (e.g., 1, 9, 12)
-            * Extract this value AS-IS for the "quantity" field
+          🖊️ CRITICAL: HANDWRITTEN TEXT AND NUMBER RECOGNITION 🖊️
+          
+          HANDWRITTEN RECEIPTS ARE COMMON - You MUST be able to read handwriting accurately!
+          
+          🔢 ADVANCED HANDWRITTEN NUMBER RECOGNITION - HIGH ACCURACY REQUIRED 🔢
+          
+          Your PRIMARY CHALLENGE is reading handwritten numbers with 100% accuracy.
+          Common mistakes: Misreading "4" as "9", "14" as "19", "56" as "66" or "86"
+          
+          CRITICAL DIGIT-BY-DIGIT ANALYSIS METHOD:
+          
+          For EACH handwritten number, use this step-by-step approach:
+          
+          1️⃣ DIGIT "1":
+             - Vertical line (may be straight or slightly curved)
+             - May have small hook/serif at top
+             - May have base stroke at bottom
+             - Context check: Usually smallest/thinnest digit
+             - In "14": First digit is "1" (thin vertical line)
+             - NOT to be confused with: "7" (has top horizontal), "l" (letter)
+          
+          2️⃣ DIGIT "4":
+             - Most distinctive feature: OPEN or CLOSED TOP
+             - Two main styles:
+               Style A: Triangle shape with vertical line on right (like an upside-down chair)
+               Style B: Open at top (looks like lightning bolt or "<|")
+             - Key feature: Vertical line on RIGHT side goes DOWN
+             - In "14": Second digit after the thin "1"
+             - In "4" alone: Look for the characteristic right vertical stroke
+             - NOT to be confused with: "9" (has closed circle/loop at top)
+             - VERIFICATION: If you think it's "9", look again - does it have a triangle or open top? Then it's "4"
+          
+          3️⃣ DIGIT "5":
+             - Top horizontal line (may curve slightly)
+             - Bottom curves like half circle or "C"
+             - Two-part structure: top straight, bottom curved
+             - NOT to be confused with: "S" (letter), "6" (circle with top tail)
+             - In "56": First digit with horizontal top and curved bottom
+          
+          4️⃣ DIGIT "6":
+             - Circle or loop at BOTTOM
+             - Tail/stroke comes from TOP and curves to form circle
+             - Like lowercase "b" but mirrored
+             - In "56": Second digit with circular bottom
+             - NOT to be confused with: "0" (no tail), "8" (two loops)
+          
+          5️⃣ DIGIT "7":
+             - Horizontal line at TOP
+             - Diagonal stroke going down-left to down-right
+             - May have small cross-stroke in middle (European style)
+             - NOT to be confused with: "1" (no top horizontal)
+          
+          6️⃣ DIGIT "8":
+             - Two circles/loops stacked vertically
+             - Top loop may be smaller than bottom loop
+             - Continuous line forming both loops
+             - NOT to be confused with: "3" (has gaps), "B" (letter)
+          
+          7️⃣ DIGIT "9":
+             - Circle/loop at TOP
+             - Vertical tail going DOWN from the circle
+             - Like "g" in cursive or "q" upside down
+             - Key difference from "4": "9" has CLOSED CIRCLE at top, "4" has OPEN/TRIANGLE
+             - NOT to be confused with: "4" (open top, different structure)
+          
+          8️⃣ DIGIT "0":
+             - Oval or circle shape
+             - No tails, no internal marks
+             - May be slightly tilted
+             - NOT to be confused with: "O" (letter - check context)
+          
+          9️⃣ DIGIT "2":
+             - Curved top (like swan neck)
+             - Horizontal or diagonal bottom
+             - May look like "Z" shape
+             - NOT to be confused with: "Z" (letter - check context)
+          
+          🔟 DIGIT "3":
+             - Two curves stacked (like two "C"s facing right)
+             - Middle may connect or have gap
+             - NOT to be confused with: "8" (closed loops), "E" (letter)
+          
+          🎯 CRITICAL VERIFICATION STEPS FOR ACCURACY:
+          
+          After reading each handwritten number, ASK YOURSELF:
+          
+          For "4" vs "9" confusion (MOST COMMON ERROR):
+          ❓ Does it have an OPEN TOP or TRIANGLE shape? → It's "4"
+          ❓ Does it have a CLOSED CIRCLE at top? → It's "9"
+          ❓ Can you see a clear vertical stroke on the RIGHT side? → It's "4"
+          ❓ Does it look like a lollipop with tail going down? → It's "9"
+          
+          For "14" specifically:
+          ✓ First digit: thin vertical line = "1"
+          ✓ Second digit: has open/triangle top with right vertical = "4"
+          ✓ Together: "14" (not "19", not "11", not "44")
+          
+          For "56" specifically:
+          ✓ First digit: horizontal top + curved bottom = "5"
+          ✓ Second digit: circular bottom with top tail = "6"
+          ✓ Together: "56" (not "66", not "86", not "96")
+          
+          For "4" alone:
+          ✓ Look for the OPEN structure at top (not a closed circle like "9")
+          ✓ Look for the RIGHT-SIDE vertical stroke going down
+          ✓ May look like: "4", "ч", "<|", or triangle-with-leg
+          ✓ Result: "4" (not "9", not "7", not "1")
+          
+          MATHEMATICAL VERIFICATION (EXTREMELY IMPORTANT):
+          - After extracting numbers, IMMEDIATELY verify with math
+          - If Quantity = 4, Price = 5.10, Total should be ≈ 20.40
+          - If Quantity = 14, Price = 5.10, Total should be ≈ 71.40
+          - If Quantity = 56, Price = 5.10, Total should be ≈ 285.60
+          - If math DOESN'T MATCH → You misread a digit → GO BACK and re-examine
+          
+          STEP-BY-STEP NUMBER READING PROTOCOL:
+          1. Look at the full handwritten number
+          2. Break it into individual digits (left to right)
+          3. Identify EACH digit using the patterns above
+          4. For each "4": Confirm it's NOT "9" (check for open top vs closed circle)
+          5. For each "5": Confirm it's NOT "6" or "S"
+          6. For each "6": Confirm it's NOT "8" or "0"
+          7. Assemble the complete number
+          8. VERIFY with mathematical calculation (qty × price = total)
+          9. If math fails → Re-read the most ambiguous digits
+          
+          COMMON HANDWRITING ERROR PATTERNS TO AVOID:
+          ❌ Reading "4" as "9" → Always check: open top = 4, closed circle = 9
+          ❌ Reading "14" as "19" → The second digit is "4" (open top), not "9" (closed circle)
+          ❌ Reading "14" as "11" → Second digit has more structure than just a line
+          ❌ Reading "56" as "66" → First digit has straight top (5), not circular (6)
+          ❌ Reading "56" as "86" → First digit is "5" (half circle bottom), not "8" (full circles)
+          ❌ Reading "4" as "H" → Context: in number column = digit 4, in text = letter H
+          
+          Handwritten Text Recognition Rules:
+          - Product names may be abbreviated or written in cursive
+          - Look for recognizable brand names, common words
+          - Some letters to watch carefully:
+            * "a" vs "o" - check if it's open at top
+            * "e" vs "c" - check for the horizontal line in "e"
+            * "l" vs "i" vs "1" - use context (is it in a word or number?)
+            * "n" vs "u" - "n" has humps going up, "u" curves down
+            * "m" vs "w" - orientation and context
+          
+          Verification Strategy for Handwritten Data:
+          1. Read the handwritten value
+          2. Check if it makes sense in context (quantity should be small, prices reasonable)
+          3. Verify math: Does quantity × unit price = total? If yes, you read it correctly
+          4. If math doesn't match, re-examine the handwritten digits you may have misread
+          5. Use surrounding printed text/numbers as reference for handwriting style
+          
+          Examples of Handwritten Number Reading:
+          - Handwritten "24" - might look like "24" or "2H" - verify with math
+          - Handwritten "3.25" - decimal point may be small dot or dash - look carefully
+          - Handwritten "0" vs "O" - if it's in a number position, it's zero; in text, it's letter O
+          - Handwritten "1" vs "l" vs "I" - in quantity column = 1 (number), in product name = letter
+          
+          If Handwriting is Truly Illegible:
+          - Use null for that specific field
+          - DO NOT guess or make up values
+          - But make a STRONG effort first - most handwriting CAN be read with careful analysis
+          
+          MANDATORY OCR ACCURACY RULES:
+          ⚠️ CRITICAL: Read ONLY what is ACTUALLY VISIBLE in the image
+          ⚠️ DO NOT fabricate, estimate, or guess ANY values
+          ⚠️ DO NOT use example data or placeholder values
+          ⚠️ DO NOT assume standard prices or quantities
+          ⚠️ If a field is unclear or unreadable, use null - DO NOT GUESS
+          ⚠️ Read each digit carefully - verify decimal points, commas, and number formatting
+          ⚠️ Double-check every extracted number against the actual image
+          ⚠️ Product names must match EXACTLY as written (including spelling, abbreviations, brands)
+          ⚠️ Dates must be extracted as shown (convert to YYYY-MM-DD format)
+          ⚠️ Invoice numbers must be extracted EXACTLY as printed
+          ⚠️ Supplier names must match the actual business name on the invoice
+          
+          VISUAL OCR CHECKLIST (for each value you extract):
+          1. Can you clearly SEE this value in the image? (Yes → extract it, No → use null)
+          2. Is the text/number sharp enough to read with confidence? (Yes → extract it, No → use null)
+          3. Did you read it from the CORRECT column/position? (verify alignment)
+          4. Did you verify the decimal point position? (e.g., 22.41 not 224.1)
+          5. Does this value make logical sense? (qty=365 for one item is suspicious, might be total)
+          6. For handwritten numbers: Did you verify EACH DIGIT individually? (4 vs 9, 5 vs 6, 1 vs 7)
+          7. For handwritten numbers: Did you use MATH to verify? (qty × price = total)
+          
+          REAL-WORLD HANDWRITTEN NUMBER EXAMPLES:
+          ✓ Handwritten "4" → May look like: 4, ч, ⁴, <|, triangle-with-leg → EXTRACT AS: 4 (number)
+          ✓ Handwritten "14" → May look like: 1ч, |4, thin-line + triangle → EXTRACT AS: 14 (number)
+          ✓ Handwritten "56" → May look like: 5б, curved-top + circle-bottom → EXTRACT AS: 56 (number)
+          ✗ DO NOT read "4" as "9" → "9" has closed circle at top, "4" has open/triangle top
+          ✗ DO NOT read "14" as "19" → Second digit is "4" (open structure), not "9" (closed circle)
+          ✗ DO NOT read "56" as "66" → First digit "5" has horizontal top, "6" has circular top
+          
+          🖊️ MIXED PRINTED AND HANDWRITTEN RECEIPTS:
+          - Many receipts have BOTH printed AND handwritten elements
+          - Common pattern: Printed template/form with handwritten fill-ins
+          - Headers/column names are usually PRINTED (typed)
+          - Product names, quantities, prices may be HANDWRITTEN (written by hand)
+          - Treat handwritten data with EQUAL importance as printed data
+          - Apply the handwritten recognition rules (see above) when you encounter handwriting
+          - Use the printed column headers to guide where handwritten values belong
+          
+          CRITICAL: HANDLING "QTY CRT/PCS" COLUMN AND PRICING:
+          
+          The receipt will have a "QTY CRT/PCS" column with format "X/Y" (e.g., "2/24", "0/3", "1/0")
+          where X = number of cartons, Y = pieces per carton
+          
+          The receipt may have ONE or MORE of these price columns:
+          - CRT Price (price per carton)
+          - PCS Price (price per piece)
+          - Unit Price (could be per carton or per piece)
+          
+          CALCULATION LOGIC (VERY IMPORTANT):
+          
+          Case 1: Receipt has BOTH "CRT Price" AND "PCS Price" columns
+          - Look at which value is used to calculate the Total
+          - If QTY = "2/24" (2 cartons of 24 pieces), CRT Price = 182.40, PCS Price = 7.60, Total = 364.80
+            * Check: 2 × 182.40 = 364.80 ✓ (matches Total) → CRT Price was used
+            * Therefore: quantity = 2, unitPrice = 182.40, crtQty = 2, pcsQty = 24
+          - If QTY = "0/3" (3 pieces), CRT Price = 68.40, PCS Price = 2.85, Total = 8.55
+            * Check: 0 × 68.40 = 0 ✗ (doesn't match)
+            * Check: 3 × 2.85 = 8.55 ✓ (matches Total) → PCS Price was used
+            * Therefore: quantity = 3, unitPrice = 2.85, crtQty = 0, pcsQty = 3
+          
+          Case 2: Receipt has only ONE price column
+          - Determine if it's per carton or per piece by checking the math
+          - QTY = "2/24", Price = 7.60, Total = 364.80
+            * Check: 2 × 7.60 = 15.20 ✗ (doesn't match)
+            * Check: 48 × 7.60 = 364.80 ✓ (matches) → Price is per piece
+            * Therefore: quantity = 48 (2 × 24), unitPrice = 7.60, crtQty = 2, pcsQty = 24
+          
+          DECISION TREE FOR QUANTITY AND UNIT PRICE:
+          1. Read the QTY column value:
+             - If it's a simple number (1, 2, 9) → quantity = that number
+             - If it's "X/Y" format (2/24, 0/3) → Extract crtQty (X) and pcsQty (Y)
+          2. Identify available price columns (CRT Price, PCS Price, Unit Price, etc.)
+          3. For "X/Y" format, use Total column to determine which calculation applies:
+             - If crtQty > 0 and crtQty × CRT_Price ≈ Total → use crtQty as quantity, CRT_Price as unitPrice
+             - If pcsQty > 0 and pcsQty × PCS_Price ≈ Total → use pcsQty as quantity, PCS_Price as unitPrice
+             - If (crtQty × pcsQty) × PCS_Price ≈ Total → use (crtQty × pcsQty) as quantity, PCS_Price as unitPrice
+          4. Store: quantity (calculated), unitPrice (the price used), crtQty, pcsQty, totalPrice
+          
+          IMPORTANT: UNDERSTANDING QTY COLUMN VALUES:
+          
+          The QTY column header is simply "QTY" or "Quantity"
+          The VALUES inside this column tell you the format:
+          
+          Case A: Simple numeric values (bakery receipt example)
+          - QTY column shows: 1 → Extract: quantity=1, crtQty=null, pcsQty=null
+          - QTY column shows: 2 → Extract: quantity=2, crtQty=null, pcsQty=null
+          - QTY column shows: 9 → Extract: quantity=9, crtQty=null, pcsQty=null
+          - Just read the number directly as the quantity
+          
+          Case B: CRT/PCS format values (wholesale receipt example)
+          - QTY column shows: "0/3" → Extract: quantity=3, crtQty=0, pcsQty=3
+          - QTY column shows: "2/24" → Extract: quantity=(determined by price), crtQty=2, pcsQty=24
+          - QTY column shows: "1/0" → Extract: quantity=1, crtQty=1, pcsQty=0
+          - Parse the "X/Y" format to get crtQty and pcsQty, then calculate quantity
             * This is the real quantity, not calculated from CRT/PCS
           - CRT/PCS is just showing the packing information (e.g., "2/24" means 2 cartons with 24 pieces each)
           - IMPORTANT: quantity field = value from QTY column ONLY
@@ -161,23 +479,103 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
           - IMPORTANT: Unit price and total price are based on the QTY column value
           - Common UOMs: CRT (Carton), PCS (Pieces), CS (Case), BOX, EA (Each), PKG (Package), BTL (Bottle)
           - Always round numeric values to two decimals
-          - CRITICAL: Read the table structure carefully - QTY, UOM, and CRT/PCS are THREE DIFFERENT columns
           
           STEP-BY-STEP APPROACH FOR EACH ITEM:
-          1. Look at the column HEADERS to understand the table structure
-          2. For each item row, read the value from each column CAREFULLY
-          3. Extract Quantity from the Quantity column (usually the first numeric column)
-          4. Extract Unit Price from the Unit Price column (usually the middle numeric column)
-          5. Extract Total Price from the Total column (usually the last/rightmost numeric column)
-          6. Verify: Quantity × Unit Price should approximately equal Total Price
-          7. If math doesn't match, flag it but still extract all three values AS THEY APPEAR in their respective columns`
+          1. Examine the column HEADERS to identify ALL columns and their positions (they can be in ANY order)
+          2. Locate: Product name, QTY CRT/PCS, price columns (CRT Price, PCS Price, Unit Price), Total
+          3. For each item row:
+             a) Read QTY CRT/PCS value (e.g., "2/24") → parse as crtQty=2, pcsQty=24
+             b) Read ALL available price columns (CRT Price, PCS Price, etc.)
+             c) Read Total column value
+             d) Determine which price was used by checking: which calculation matches Total?
+             e) Set quantity and unitPrice based on which price matches
+          4. Verify: calculated_quantity × unitPrice ≈ Total Price (±2% tolerance)
+          5. If math matches, you extracted correctly!`
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `Extract all information from this ${documentType} image and return it in JSON format with these exact fields:
+              text: `IMPORTANT: You are analyzing a REAL invoice/receipt image. Extract ONLY the ACTUAL data visible in the image.
+              DO NOT use example data, placeholders, or make assumptions. If unclear, use null.
+              
+              STEP-BY-STEP EXTRACTION PROCESS:
+              1. First, EXAMINE the entire image to understand the layout
+              2. Locate the HEADER section (top) - find supplier name, invoice number, date
+              3. Locate the ITEM TABLE (middle) - identify column headers and read each row
+              4. Locate the SUMMARY section (bottom) - find subtotal, tax, and total
+              5. Extract values EXACTLY as shown, character by character
+              
+              🎨 CRITICAL: TABLE FORMATTING AND VISUAL ELEMENTS 🎨
+              
+              COLORED TABLES AND BACKGROUNDS:
+              - Some receipts use COLORED backgrounds for tables (blue, green, gray, etc.)
+              - COLORED TABLE CELLS are still valid data - read the text/numbers inside them
+              - Blue background with white text is COMMON - focus on reading the WHITE TEXT
+              - Don't be confused by colored headers - they're still column headers
+              - Colored alternating rows (zebra striping) are for readability - read all rows equally
+              
+              GRID LINES AND TABLE BORDERS - CRITICAL DISTINCTION:
+              ⚠️⚠️⚠️ VERTICAL LINES ARE NOT NUMBERS ⚠️⚠️⚠️
+              
+              - Tables have VERTICAL LINES to separate columns
+              - These vertical lines are BORDERS/GRID LINES, NOT the number "1"
+              - DO NOT extract table border lines as data
+              - DO NOT read "|" or "│" as the number "1"
+              - Vertical lines are STRUCTURAL elements, not content
+              
+              How to distinguish VERTICAL LINES from NUMBER "1":
+              ✓ Number "1": Appears INSIDE a cell, has context (in QTY column, in product code)
+              ✓ Number "1": Has surrounding space, aligned with other numbers
+              ✓ Number "1": May have serif (hook at top/bottom), slight curve
+              ✗ Vertical line: Extends FULL HEIGHT of row, spans multiple rows
+              ✗ Vertical line: Perfectly straight, no serifs, no variation
+              ✗ Vertical line: Separates content between columns
+              ✗ Vertical line: Often colored (gray, blue, black) matching table theme
+              
+              TABULAR FORMAT RECOGNITION:
+              - Identify column boundaries by looking at HEADER ROW alignment
+              - Each column has: Left border | Content | Right border
+              - The borders are NOT part of the data
+              - Read content BETWEEN the vertical lines, not the lines themselves
+              
+              Example of CORRECT reading:
+              Table structure: | Product | QTY | Price |
+              Visual:          | Bread   | 2   | 5.10  |
+              ✓ CORRECT: Product="Bread", QTY=2, Price=5.10
+              ✗ WRONG: Reading vertical separator lines as "1" in data
+              
+              COLOR-BASED TABLE ELEMENTS:
+              - Blue headers → Read white/light text on blue background
+              - Gray alternating rows → Read text in both white and gray rows equally
+              - Highlighted cells (yellow/green) → May indicate special items, but read normally
+              - Color coding is for VISUAL organization, not data meaning
+              
+              GRID STRUCTURE UNDERSTANDING:
+              - Modern receipts often have grid layouts with boxes/cells
+              - Each cell is bounded by lines on all 4 sides
+              - Read the CONTENT inside each cell, not the cell borders
+              - Cell borders help you understand column alignment - use them as guides
+              - Don't extract border lines, gridlines, or separators as numbers
+              
+              VISUAL NOISE FILTERING:
+              - Ignore: Logo watermarks, background patterns, decorative elements
+              - Ignore: Header/footer lines, page borders, form boundaries
+              - Ignore: Column separator lines, row divider lines, table grid
+              - Focus on: Actual text and numbers INSIDE the cells/fields
+              
+              🖊️ HANDWRITTEN RECEIPT SPECIAL INSTRUCTIONS:
+              - Many receipts contain handwritten text and numbers - you MUST read them accurately
+              - For handwritten product names: Read each letter carefully, use context for unclear letters
+              - For handwritten dates: Common formats DD/MM/YYYY or DD-MM-YYYY - parse carefully
+              - For handwritten invoice numbers: May contain letters and numbers - extract exactly
+              - For handwritten quantities/prices: Verify with math (quantity × price = total)
+              - Handwriting varies - some may be neat, some messy - make your best effort
+              - Cross-reference: If supplier name is printed at top, handwritten items should match that supplier
+              - Use mathematical verification as proof you read numbers correctly
+              
+              Extract all information from this ${documentType} image and return it in JSON format with these exact fields:
               
               {
                 "invoiceNumber": "string",
@@ -190,12 +588,11 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
                 "items": [
                   {
                     "productName": "string",
-                    "quantity": number (ACTUAL quantity from QTY column - extract AS-IS, do NOT calculate from CRT/PCS),
-                    "uom": "string - value from UOM column (can be CRT, PCS, CS, BOX, EA, or even numbers like 1, 2, 3) or null if column empty",
-                    "crtQty": number (first number from CRT/PCS column if present, e.g., 2 from '2/24' - informational only) or null,
-                    "pcsQty": number (second number from CRT/PCS column if present, e.g., 24 from '2/24' - informational only) or null,
-                    "unitPrice": number (price per unit from Unit Price column),
-                    "totalPrice": number (from Total column - should match quantity × unitPrice),
+                    "quantity": number (calculated total quantity - see QTY CRT/PCS handling below),
+                    "crtQty": number (carton quantity from CRT/PCS format, e.g., 2 from '2/24') or null,
+                    "pcsQty": number (pieces per carton from CRT/PCS format, e.g., 24 from '2/24') or null,
+                    "unitPrice": number (price per unit - could be from Unit Price, CRT Price, or PCS Price column),
+                    "totalPrice": number (total line amount from Total column),
                     "sku": "string from SKU/Code column or null",
                     "barcode": "string from Barcode column or null"
                   }
@@ -203,32 +600,130 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
                 "confidence": number (0.0 to 1.0)
               }
               
+              ⚠️⚠️⚠️ CRITICAL REMINDER: EXTRACT REAL DATA ONLY ⚠️⚠️⚠️
+              - Read ACTUAL text and numbers from the image using OCR
+              - Do NOT generate sample/example data
+              - Do NOT use placeholder values like "Product 1", "Product 2"
+              - Do NOT assume prices like 10.00, 20.00, 5.00 if not visible
+              - VERIFY each extracted value by looking at the image again
+              - If you cannot read something clearly, use null
+              - Product names must be EXACT matches (including spelling errors if present)
+              - All numbers must be ACTUAL values from the image (not rounded or estimated)
+              
+              CRITICAL: READING SUBTOTAL, TAX, AND TOTAL CORRECTLY
+              - These financial summary values appear at the BOTTOM of the invoice, AFTER all product line items
+              - They are in a SUMMARY SECTION, not in the product table
+              - Common labels: "SUB TOTAL", "SUBTOTAL", "Sub Total", "TOTAL BEFORE TAT", "Net Amount"
+              - Look for these summary rows BELOW the last product item
+              - Read row-wise from LEFT to RIGHT in the summary section
+              - Structure is usually: [Label] [Amount in QR]
+              - DO NOT confuse summary amounts with product quantities or prices
+              - SUBTOTAL = Sum of all item totals (before tax)
+              - TAX/VAT = Tax amount (often 0% in Qatar, so might be 0.00)
+              - TOTAL/GRAND TOTAL = Final amount (Subtotal + Tax)
+              - Read each summary line independently:
+                Example: "SUB TOTAL    365.04" → subtotal: 365.04
+                Example: "VAT (0%)     0.00" → tax: 0.00  
+                Example: "TOTAL        365.04" → total: 365.04
+              - Verify: SUBTOTAL + TAX should equal TOTAL (within rounding tolerance)
+              - If summary section has multiple currency amounts, use the QR (Qatari Riyal) values
+              
               CRITICAL TABLE READING INSTRUCTIONS:
               
               STEP 1: IDENTIFY THE TABLE STRUCTURE FIRST
               - Locate the table header row showing column names
+              - Look for COLORED HEADERS (may be blue, green, gray background with white text)
+              - Identify the GRID STRUCTURE - see where vertical lines separate columns
+              - Use vertical lines as GUIDES to understand column boundaries
+              - DO NOT extract the vertical lines themselves as data
               - Identify which column is "Product Name" or "Description"
-              - Identify which column is "Quantity" (or "Qty", "Q")
-              - Identify which column is "UOM" (Unit of Measure) - may show CRT, PCS, CS, etc.
-              - Identify which column is "CRT/PCS" or shows format like "2/24" (carton/pieces format)
+              - Identify which column is "Quantity" (or "Qty", "Q", "QTY CRT/PCS")
               - Identify which column is "Unit Price" (or "U.Price", "Price", "Rate", "UP")
+              - Identify which column is "CRT Price" and/or "PCS Price" (if separate price columns exist)
               - Identify which column is "Total" (or "Amount", "Line Total", "Amt")
               - Identify which column is "SKU" or "Code" (if present)
               - Identify which column is "Barcode" (if present)
-              - Draw imaginary vertical lines for each column
+              - IGNORE any "UOM" columns (Unit of Measure) - do not extract from them
+              - Note: Product table ends when you see summary labels like "SUB TOTAL", "TOTAL", "TAX"
+              
+              ⚠️ CRITICAL: DISTINGUISHING TABLE STRUCTURE FROM DATA:
+              - Vertical lines (|, │, ║) = Column separators = NOT DATA
+              - Horizontal lines (─, —, ═) = Row separators = NOT DATA
+              - Cell borders and grid lines = Formatting only = IGNORE THEM
+              - Read CONTENT inside cells, NOT the cell borders
+              - If you see a perfectly straight vertical line spanning multiple rows → It's a table border, NOT "1"
               
               STEP 2: FOR EACH PRODUCT ROW, READ VALUES FROM THE CORRECT COLUMNS
+              - Read ONLY product rows (skip summary rows with labels like "SUB TOTAL", "TOTAL", "GRAND TOTAL")
+              - For each product row, read cell-by-cell, column-by-column from LEFT to RIGHT
+              - Use column boundaries (vertical lines) as GUIDES to stay in the correct column
+              - Read the TEXT/NUMBERS inside each cell, not the cell borders
+              - Stay within column boundaries - don't jump to adjacent columns
               - Read Product Name from the name/description column
               - Read Quantity from the Quantity column (do NOT confuse with unit price or total!)
+              - IMPORTANT: Quantity values are typically small numbers (1, 2, 9, 12, 24, 48, etc.)
+              - IMPORTANT: Do NOT confuse subtotal amounts (like 365.04) with quantity values
+              - If you see a large decimal number, it's probably a price, not a quantity!
+              - IMPORTANT: If the table has blue/colored background, focus on reading the text INSIDE the colored cells
               
-              CRITICAL: UOM FORMAT DETECTION
-              - ALWAYS check for a separate UOM column first (may be labeled "UOM", "Unit", "U/M")
-              - UOM column value can be:
-                * Text: "CRT", "PCS", "CS", "BOX", "EA", "PKG", "BTL" - extract as string
-                * Number: 1, 2, 3 - extract as string (convert to string)
-                * Mixed: "1CRT", "2PCS" - extract full value as string
-              - IMPORTANT: ALWAYS extract UOM value even if it's just a number or empty - record what you see
+              ⚠️⚠️⚠️ CRITICAL: QUANTITY EXTRACTION RULES ⚠️⚠️⚠️
+              - QUANTITY column contains NUMBERS: 1, 2, 3, 9, 12, 24, 48, etc. OR "X/Y" format
+              - For simple format: Extract number directly from QTY column
+              - For "X/Y" format: Parse crtQty and pcsQty, calculate quantity based on price check
+              - DO NOT extract from UOM columns (labeled "UOM", "Unit", "NOS", "PCS", "CRT")
+              - Example CORRECT extraction:
+                * QTY column shows: 9 → quantity: 9
+                * QTY column shows: "2/24" → crtQty: 2, pcsQty: 24, quantity: (determined by price)
               
+              COLUMN READING RULES:
+              - Look at column HEADERS to identify which is which
+              - QTY/Quantity column = Contains numbers or "X/Y" format
+              - IGNORE any UOM/Unit columns - do not extract them
+              
+              CRITICAL: READING UNIT PRICE CORRECTLY
+              - Locate the Unit Price column header (can be: "Unit Price", "U.Price", "U Price", "U/Price", "Price", "Rate", "UP", "Base Price", "U.P.", "Unit Rate")
+              - For each item row, read the value DIRECTLY under the Unit Price header
+              - Unit Price is the price PER SINGLE UNIT/PIECE of the product
+              - Use careful OCR: Pay attention to decimal points and digit clarity
+              - Verification check: Calculate Quantity × Unit Price - does it equal Total Price?
+              - If verification fails, you likely misread the Unit Price column - re-read it carefully
+              - Examples of correct reading:
+                * If Total=22.41, Qty=1, then Unit Price should be around 22.41
+                * If Total=128.25, Qty=9, then Unit Price should be around 14.25 (128.25÷9)
+                * If Total=365.04, Qty=48, then Unit Price should be around 7.60 (365.04÷48)
+                * If Total=8.55, Qty=3 (from "0/3"), then Unit Price should be 2.85 (8.55÷3)
+              - Common OCR errors to avoid in Unit Price:
+                * Misreading 22.41 as 2.241 or 224.1
+                * Misreading 14.25 as 1.425 or 142.5
+                * Misreading 2.85 as 28.5 or 0.285
+                * Reading digits from wrong column (Total instead of Unit Price)
+                * Confusing 0 with O, 5 with S, 8 with B, 1 with I
+              
+              CRITICAL: QTY COLUMN FORMAT DETECTION
+              - Look for QTY column (may be labeled "QTY", "Quantity", "QTY CRT/PCS")
+              - QTY column format can be:
+                * Simple numbers: 1, 2, 9, 12, 24 → extract directly as quantity
+                * CRT/PCS format: "X/Y" like "0/3", "2/24" → parse to get crtQty and pcsQty
+              - DO NOT extract from UOM columns (labeled "UOM", "Unit", "U/M", "NOS")
+              - IGNORE any UOM column values completely
+              
+              CRITICAL: HANDLING "QTY CRT/PCS" FORMAT
+              - If QTY column shows "X/Y" format (e.g., "2/24", "0/3"):
+                * This shows cartons (X) and pieces per carton (Y)
+                * Parse: crtQty = X, pcsQty = Y
+                * Determine quantity based on which price matches Total (see decision tree)
+                * Example: "0/3" with PCS Price 2.85, Total 8.55 → quantity = 3
+                * Example: "2/24" with CRT Price 182.40, Total 364.80 → quantity = 2
+              
+              CRITICAL: SEPARATE CRT AND PCS COLUMNS
+              - If you see BOTH a "CRT" column AND a "PCS" column (two separate columns):
+                * Read CRT value → store as crtQty
+                * Read PCS value → store as pcsQty
+                * Calculate quantity = crtQty × pcsQty (if both > 0)
+                * If only CRT has value: quantity = crtQty
+                * If only PCS has value: quantity = pcsQty
+              
+              STANDARD QTY COLUMN (when separate from CRT/PCS):
               - Check if there's a CRT/PCS column showing format like "2/24":
                 * If yes: crtQty = first number, pcsQty = second number
                 * Calculate: quantity = crtQty × pcsQty
@@ -260,21 +755,66 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
               - The UOM value is SEPARATE from quantity - do not confuse them
               
               - Read Unit Price ONLY from the Unit Price column (do NOT confuse with quantity or total!)
-              - CRITICAL: Unit Price should be per PIECE, not per carton
+              - CRITICAL UNIT PRICE VALIDATION:
+                * After reading Unit Price, verify: Quantity × Unit Price ≈ Total Price (within ±5% for rounding)
+                * If verification fails, RE-READ the Unit Price column more carefully
+                * Pay extra attention to decimal point placement
+                * Ensure you're reading from the correct column (not Total or another column)
+                * Use the column header as a guide to stay in the right column
               - Read Total Price ONLY from the Total column (usually rightmost numeric column)
               - Read SKU from SKU/Code column if present
               - Read Barcode from Barcode column if present
               - Read UOM from UOM column if present (CRT, PCS, CS, BOX, EA, etc.)
               - Each item row is independent - read each cell carefully
+              - STOP reading product rows when you encounter summary labels
               
-              STEP 3: VALIDATE MATH FOR EACH ITEM
-              - After extracting: quantity × unitPrice should ≈ totalPrice (within 0.05 for rounding)
-              - If CRT/PCS format: (crtQty × pcsQty) × unitPrice should ≈ totalPrice
-              - If math is correct: You successfully read the columns correctly!
-              - If math is wrong: You mixed up the columns - re-examine which value came from which column
-  
+              STEP 3: READ THE FINANCIAL SUMMARY SECTION (AFTER PRODUCT TABLE)
+              - After the last product row, look for the summary section at the bottom
+              - This section contains financial totals, NOT product data
+              - Read row-by-row in the summary section:
+                * Find "SUB TOTAL" or "SUBTOTAL" row → extract the amount as subtotal
+                * Find "VAT" or "TAX" row → extract the amount as tax
+                * Find "TOTAL" or "GRAND TOTAL" row → extract the amount as total
+              - Summary amounts are typically LARGER than individual item prices
+              - Read carefully to avoid mixing up summary with product table values
+              - Common summary row formats:
+                * "SUB TOTAL          365.04" → subtotal: 365.04
+                * "VAT (0%)           0.00" → tax: 0.00
+                * "TOTAL              365.04" → total: 365.04
+              - DO NOT use values from the QTY column as subtotal
+              - DO NOT use values from product Total column as invoice subtotal
+              - The subtotal is the SUM of all product line totals
               
-             
+              STEP 4: VALIDATE MATH FOR EACH ITEM (MOST IMPORTANT STEP)
+              - After extracting all three values for each item, perform this validation:
+              - Calculate: expected_total = quantity × unitPrice
+              - Compare: Is expected_total ≈ totalPrice? (allow ±2% difference for rounding)
+              - If YES: ✓ You successfully read the columns correctly!
+              - If NO: ✗ ERROR - You mixed up the columns! 
+                * STOP and re-examine the row
+                * Check which value came from which column
+                * Most likely error: You read Unit Price from the wrong column
+                * Look at the column headers again and trace down to the value
+                * Re-read Unit Price from the correct "U.Price" column
+                * Common fix: Unit Price should be SMALLER than Total Price (unless qty=1)
+              - MANDATORY: Perform this validation for EVERY item before moving to next item
+              - If math doesn't work out for multiple items, the column identification is wrong - start over
+              
+              STEP 5: FINAL FINANCIAL VALIDATION
+              - After processing all items and summary section:
+              - Verify: Sum of all item.totalPrice values should equal subtotal
+              - Verify: subtotal + tax should equal total (within ±1 QR tolerance for rounding)
+              - If financial validation fails, re-check the summary section reading
+              
+              READING STRATEGY FOR HIGH ACCURACY:
+              1. Process invoice in THREE PASSES:
+                 Pass 1: Identify table structure (headers and columns)
+                 Pass 2: Extract product rows one-by-one (stop at summary section)
+                 Pass 3: Extract financial summary (subtotal, tax, total)
+              2. For each row, read LEFT to RIGHT, staying within column boundaries
+              3. Validate math after EVERY item extraction
+              4. Keep product table separate from summary section
+              5. Use visual alignment cues (vertical lines between columns)
               
               COMMON ERRORS TO AVOID:
               ❌ DO NOT use totalPrice as unitPrice (they are different columns!)
@@ -282,9 +822,23 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
               ❌ DO NOT assume all items have quantity=1 (read the actual Qty column!)
               ❌ DO NOT mix up values between different items
               ❌ DO NOT confuse the Total column with the Unit Price column
+              ❌ DO NOT misread decimal points in Unit Price (22.41 ≠ 2.241 ≠ 224.1)
+              ❌ DO NOT skip the math validation step - ALWAYS verify Quantity × Unit Price = Total
+              ❌ DO NOT confuse product line totals with invoice subtotal
+              ❌ DO NOT read subtotal from the QTY column (quantity values are small, subtotals are large)
+              ❌ DO NOT include summary rows (SUB TOTAL, TOTAL) in the items array
+              ❌ DO NOT use crtQty when pcsQty was actually used (check which price matches Total!)
+              ❌ DO NOT ignore CRT Price and PCS Price columns - they determine quantity calculation
               ❌ If SKU is the same for multiple items (e.g., 20000003), that's OK - products can share SKUs
-              ✓ Each row is independent - read quantity, unitPrice, and totalPrice from their respective columns
-              ✓ Verify math for EVERY item: quantity × unitPrice = totalPrice
+              ✓ Each row is independent - read QTY CRT/PCS, all price columns, and Total
+              ✓ Use Total column to determine which price and quantity calculation is correct
+              ✓ Verify math for EVERY item: calculated_quantity × selected_price ≈ totalPrice (±2% tolerance)
+              ✓ Verify math for EVERY item: quantity × unitPrice ≈ totalPrice (±2% tolerance)
+              ✓ If math fails, re-read the Unit Price column - you likely misread it
+              ✓ Pay extreme attention to decimal point placement in Unit Price column
+              ✓ Use column headers as guides to stay in the correct column
+              ✓ Read subtotal from the summary section, NOT from the product table
+              ✓ Process invoice in sections: table structure → products → financial summary
               
               ADDITIONAL REQUIREMENTS:
               - Extract ALL product rows (skip only summary rows like "SUB TOTAL", "TOTAL")
@@ -295,25 +849,108 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
               
               IMPORTANT FIELD EXTRACTION:
               - productName: from Product/Description column (required)
-              - quantity: total pieces - if CRT/PCS format exists, multiply crtQty \u00d7 pcsQty
-              - uom: ALWAYS extract from UOM column if present - can be text (CRT, PCS, CS) or number (1, 2, 3) - convert everything to string
-              - crtQty: first number in "X/Y" format from CRT/PCS column (e.g., 2 from "2/24")
-              - pcsQty: second number in "X/Y" format from CRT/PCS column (e.g., 24 from "2/24")
-              - unitPrice: price per piece from Unit Price column (required)
-              - totalPrice: from Total column - should equal quantity \u00d7 unitPrice (required)
+              - quantity: calculated based on which price is used (see decision tree above)
+              - crtQty: first number in "X/Y" format from QTY CRT/PCS column (e.g., 2 from "2/24"), or null if simple QTY
+              - pcsQty: second number in "X/Y" format from QTY CRT/PCS column (e.g., 24 from "2/24"), or null if simple QTY
+              - unitPrice: price per unit from Price column (required)
+              - totalPrice: from Total column - should equal quantity × unitPrice (required)
               - sku: from SKU/Code column - extract exactly as shown
               - barcode: from Barcode column - extract exactly as shown
               
+              ⚠️⚠️⚠️ CRITICAL: DO NOT EXTRACT UOM (Unit of Measure) ⚠️⚠️⚠️
+              - IGNORE any column labeled "UOM", "Unit", "U/M", "NOS", "PCS", "CRT"
+              - DO NOT include "uom" field in the JSON output
+              - Use ONLY the "QTY" column for quantity information
+              - The QTY column values can be simple numbers OR "X/Y" format
+              
               EXAMPLES OF CORRECT EXTRACTION:
-              Row with: Product="MILK 1L FF" | UOM="CRT" | QTY=1 | CRT/PCS="2/24" | Price=7.60 | Total=7.60 | SKU=20000003
-              Extract: {productName:"MILK 1L FF", quantity:1, uom:"CRT", crtQty:2, pcsQty:24, unitPrice:7.60, totalPrice:7.60, sku:"20000003"}
-              Note: quantity=1 from QTY column, CRT/PCS "2/24" is just packing info
               
-              Row with: Product="MILK 2L FF" | UOM="PCS" | QTY=9 | CRT/PCS="2/24" | Price=14.25 | Total=128.25 | SKU=20000003
-              Extract: {productName:"MILK 2L FF", quantity:9, uom:"PCS", crtQty:2, pcsQty:24, unitPrice:14.25, totalPrice:128.25, sku:"20000003"}
-              Note: quantity=9 from QTY column, CRT/PCS "2/24" is just packing info
+              Example 1 - Simple QTY format (bakery receipt):
+              Header: Product | QTY | Unit Price | Total
+              Row: "SAMOONA 6x360 gm" | 1 | 3.25 | 3.25
+              Analysis: QTY column shows simple number "1"
+              Extract: {productName:"SAMOONA 6x360 gm", quantity:1, crtQty:null, pcsQty:null, unitPrice:3.25, totalPrice:3.25}
+              Verify: 1 × 3.25 = 3.25 ✓ CORRECT
               
-              If a column shows "-" or is empty, use null for that field`
+              Example 2 - Simple QTY format with quantity > 1:
+              Header: Product | QTY | Unit Price | Total
+              Row: "CREAM BUN 1x75 gm" | 2 | 0.90 | 1.80
+              Analysis: QTY column shows simple number "2"
+              Extract: {productName:"CREAM BUN 1x75 gm", quantity:2, crtQty:null, pcsQty:null, unitPrice:0.90, totalPrice:1.80}
+              Verify: 2 × 0.90 = 1.80 ✓ CORRECT
+              
+              Example 3 - CRT/PCS format inside QTY column (pieces only):
+              Header: Product | QTY | CRT Price | PCS Price | Total
+              Row: "YOGURT" | 0/3 | 68.40 | 2.85 | 8.55
+              Analysis: QTY column shows "0/3" = 0 cartons, 3 pieces
+                - Check CRT: 0 × 68.40 = 0 ✗ (doesn't match 8.55)
+                - Check PCS: 3 × 2.85 = 8.55 ✓ (matches!)
+              Extract: {productName:"YOGURT", quantity:3, crtQty:0, pcsQty:3, unitPrice:2.85, totalPrice:8.55}
+              Verify: 3 × 2.85 = 8.55 ✓ CORRECT
+              
+              Example 4 - CRT/PCS format inside QTY column (cartons only):
+              Header: Product | QTY | CRT Price | PCS Price | Total
+              Row: "WATER CASE" | 2/24 | 182.40 | 7.60 | 364.80
+              Analysis: QTY column shows "2/24" = 2 cartons of 24 pieces each
+                - Check CRT: 2 × 182.40 = 364.80 ✓ (matches!)
+                - Check PCS: 48 × 7.60 = 364.80 ✓ (also matches, but CRT qty matches directly)
+              Extract: {productName:"WATER CASE", quantity:2, crtQty:2, pcsQty:24, unitPrice:182.40, totalPrice:364.80}
+              Verify: 2 × 182.40 = 364.80 ✓ CORRECT (used CRT Price)
+              
+              Example 5 - CRT/PCS format inside QTY column with single Price:
+              Header: Product | QTY | Unit Price | Total
+              Row: "CHIPS BOX" | 2/24 | 7.60 | 364.80
+              Analysis: QTY column shows "2/24" = 2 cartons of 24 pieces each = 48 total pieces
+                - Check CRT: 2 × 7.60 = 15.20 ✗ (doesn't match 364.80)
+                - Check Total PCS: 48 × 7.60 = 364.80 ✓ (matches!)
+              Extract: {productName:"CHIPS BOX", quantity:48, crtQty:2, pcsQty:24, unitPrice:7.60, totalPrice:364.80}
+              Verify: 48 × 7.60 = 364.80 ✓ CORRECT (Price is per piece, so use total pieces)
+              
+              Example 6 - CRT/PCS format with columns in different order:
+              Header: Product | Total | PCS Price | QTY | CRT Price
+              Row: "JUICE" | 8.55 | 2.85 | 0/3 | 68.40
+              Analysis: Columns are in different order! Read by header names, not position
+                - QTY column value: "0/3" = 0 cartons, 3 pieces
+                - CRT Price: 68.40, PCS Price: 2.85, Total: 8.55
+                - Check: 3 × 2.85 = 8.55 ✓ (PCS Price matches)
+              Extract: {productName:"JUICE", quantity:3, crtQty:0, pcsQty:3, unitPrice:2.85, totalPrice:8.55}
+              Verify: 3 × 2.85 = 8.55 ✓ CORRECT
+              
+              Example 7 - CRT/PCS format with CRT Price:
+              Header: Product | QTY | CRT Price | PCS Price | Total
+              Row: "MILK BOX" | 1/0 | 182.40 | 7.60 | 182.40
+              Analysis: QTY column shows "1/0" = 1 carton, 0 pieces
+                - Check CRT: 1 × 182.40 = 182.40 ✓ (matches!)
+              Extract: {productName:"MILK BOX", quantity:1, crtQty:1, pcsQty:0, unitPrice:182.40, totalPrice:182.40}
+              Verify: 1 × 182.40 = 182.40 ✓ CORRECT (used CRT Price because only cartons ordered)
+              
+              WRONG Example (Common Mistake):
+              Header: Product | QTY | PCS Price | Total
+              Row: "YOGURT" | 0/3 | 2.85 | 8.55
+              ❌ WRONG Extraction: {quantity:0, unitPrice:68.40, totalPrice:8.55}
+              Why wrong? Used crtQty (0) instead of pcsQty (3), and wrong price
+              ✓ CORRECT: {quantity:3, crtQty:0, pcsQty:3, unitPrice:2.85, totalPrice:8.55}
+              
+              KEY TAKEAWAY: The QTY column is ONE column that can contain EITHER:
+              - Simple numbers (1, 2, 9, 12) for simple quantity
+              - "X/Y" format (0/3, 2/24, 1/0) for carton/piece breakdown
+              Both are just different VALUE formats in the same QTY column
+              
+              If a column shows "-" or is empty, use null for that field
+              
+              FINAL ACCURACY CHECK BEFORE RETURNING JSON:
+              ✓ Did I extract REAL data from the IMAGE (not example data)?
+              ✓ Did I verify supplier name matches what's printed at the top?
+              ✓ Did I verify invoice number matches exactly?
+              ✓ Did I extract the correct date format?
+              ✓ Did I read all product names EXACTLY as written?
+              ✓ Did I verify quantities are reasonable (usually small numbers)?
+              ✓ Did I verify unit prices by checking: qty × unit price = total?
+              ✓ Did I extract subtotal from summary section (not from table)?
+              ✓ Did I verify: sum of item totals ≈ subtotal?
+              ✓ Did I set appropriate confidence level based on image clarity?
+              
+              If you answered NO to any question above, RE-EXAMINE the image before responding.`
             },
             {
               type: "image_url",
@@ -326,61 +963,162 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
         }
       ],
       response_format: { type: "json_object" },
-      max_tokens: 4000,
-      temperature: 0.1
+      max_tokens: 4096,
+      temperature: 0.05,
+      top_p: 0.95
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
     
-    console.log("✅ AI Extraction Results (raw):", {
-      invoiceNumber: result.invoiceNumber,
-      supplierName: result.supplierName,
-      itemsCount: result.items?.length || 0,
-      items: result.items?.map((item: any) => ({
-        name: item.productName,
-        qty: item.quantity,
-        uom: item.uom,
-        crtQty: item.crtQty,
-        pcsQty: item.pcsQty,
-        sku: item.sku,
-        barcode: item.barcode,
-        unitPrice: item.unitPrice,
-        total: item.totalPrice
-      })),
-      total: result.total,
-      confidence: result.confidence
-    });
+    // Detect if AI returned fake/example data
+    const suspiciousPatterns = {
+      fakeProductNames: ['Product 1', 'Product 2', 'Product 3', 'Item 1', 'Item 2', 'Sample Product'],
+      fakeSuppliers: ['Supplier Name', 'ABC Company', 'Example Corp', 'Sample Supplier'],
+      roundPrices: true // Will check if all prices are round numbers like 10.00, 20.00, etc.
+    };
+    
+    // Check for suspicious patterns
+    let hasSuspiciousData = false;
+    const suspiciousReasons: string[] = [];
+    
+    if (result.items && result.items.length > 0) {
+      // Check for fake product names
+      const fakeProducts = result.items.filter((item: any) => 
+        suspiciousPatterns.fakeProductNames.some(fake => 
+          item.productName?.toLowerCase().includes(fake.toLowerCase())
+        )
+      );
+      if (fakeProducts.length > 0) {
+        hasSuspiciousData = true;
+        suspiciousReasons.push(`Found ${fakeProducts.length} fake product names`);
+      }
+      
+      // Check if all prices are round numbers (e.g., 10.00, 20.00, 5.00)
+      const allRoundPrices = result.items.every((item: any) => {
+        const price = Number(item.unitPrice) || 0;
+        return price > 0 && price % 1 === 0; // Check if it's a whole number
+      });
+      if (allRoundPrices && result.items.length >= 2) {
+        hasSuspiciousData = true;
+        suspiciousReasons.push('All unit prices are suspiciously round numbers');
+      }
+      
+      // Check for sequential identical prices (10, 20, 30 or 5, 10, 15)
+      const prices = result.items.map((item: any) => Number(item.unitPrice) || 0);
+      if (prices.length >= 3) {
+        const differences: number[] = [];
+        for (let i = 1; i < prices.length; i++) {
+          differences.push(prices[i] - prices[i - 1]);
+        }
+        const allSameDiff = differences.every(diff => diff === differences[0]);
+        if (allSameDiff && differences[0] !== 0) {
+          hasSuspiciousData = true;
+          suspiciousReasons.push('Prices follow suspicious sequential pattern');
+        }
+      }
+    }
+    
+    // Check for fake supplier name
+    if (suspiciousPatterns.fakeSuppliers.some(fake => 
+      result.supplierName?.toLowerCase().includes(fake.toLowerCase())
+    )) {
+      hasSuspiciousData = true;
+      suspiciousReasons.push('Supplier name appears to be placeholder text');
+    }
+    
+    if (hasSuspiciousData) {
+      console.log("\n⚠️⚠️⚠️ WARNING: SUSPICIOUS DATA DETECTED ⚠️⚠️⚠️");
+      console.log("The AI may have generated example/fake data instead of reading the actual image!");
+      console.log("Reasons:");
+      suspiciousReasons.forEach(reason => console.log(`   - ${reason}`));
+      console.log("⚠️ Please verify the extracted data matches the actual invoice image");
+      console.log("=".repeat(80));
+    }
+    
+    console.log("\n" + "=".repeat(80));
+    console.log("🤖 AI INVOICE SCANNING RESULTS");
+    console.log("=".repeat(80));
+    console.log("\n📄 INVOICE HEADER:");
+    console.log(`   Invoice Number: ${result.invoiceNumber || 'N/A'}`);
+    console.log(`   Supplier Name:  ${result.supplierName || 'N/A'}`);
+    console.log(`   Invoice Date:   ${result.invoiceDate || 'N/A'}`);
+    console.log(`   Subtotal:       QR ${result.subtotal || 0}`);
+    console.log(`   Tax:            QR ${result.tax || 0}`);
+    console.log(`   Total:          QR ${result.total || 0}`);
+    console.log(`   AI Confidence:  ${Math.round((result.confidence || 0) * 100)}%`);
+    
+    console.log("\n📦 EXTRACTED ITEMS: (" + (result.items?.length || 0) + " items)");
+    console.log("-".repeat(80));
+    
+    if (result.items && result.items.length > 0) {
+      result.items.forEach((item: any, index: number) => {
+        console.log(`\n   Item ${index + 1}: ${item.productName || 'Unknown'}`);
+        
+        // Detect if UOM was wrongly extracted as quantity
+        const qtyValue = item.quantity;
+        const uomValue = item.uom;
+        let dataSwapWarning = false;
+        
+        // Check if quantity is text (should be number)
+        if (typeof qtyValue === 'string' && /^[A-Z]+$/i.test(qtyValue)) {
+          console.log(`      ⚠️  WARNING: Quantity appears to be text "${qtyValue}" - AI may have extracted UOM as quantity!`);
+          dataSwapWarning = true;
+        }
+        
+        // Check if uom is a number (should be text)
+        if (typeof uomValue === 'number' || (typeof uomValue === 'string' && /^\d+$/.test(uomValue) && parseInt(uomValue) > 0 && parseInt(uomValue) < 100)) {
+          console.log(`      ⚠️  WARNING: UOM appears to be numeric "${uomValue}" - AI may have extracted quantity as UOM!`);
+          dataSwapWarning = true;
+        }
+        
+        console.log(`      Quantity:    ${item.quantity || 0}${item.uom ? ' ' + item.uom : ''}`);
+        if (dataSwapWarning) {
+          console.log(`      ⚠️  Data validation issue detected - please verify QTY and UOM columns are read correctly!`);
+        }        if (item.crtQty && item.pcsQty) {
+          console.log(`      CRT/PCS:     ${item.crtQty}/${item.pcsQty} (packing info)`);
+        }
+        console.log(`      Unit Price:  QR ${item.unitPrice || 0}`);
+        console.log(`      Total Price: QR ${item.totalPrice || 0}`);
+        if (item.sku) {
+          console.log(`      SKU:         ${item.sku}`);
+        }
+        if (item.barcode) {
+          console.log(`      Barcode:     ${item.barcode}`);
+        }
+        
+        // Show math validation
+        const expectedTotal = (item.quantity || 0) * (item.unitPrice || 0);
+        const actualTotal = item.totalPrice || 0;
+        const difference = Math.abs(expectedTotal - actualTotal);
+        const accuracy = actualTotal > 0 ? Math.min(100, ((1 - difference / actualTotal) * 100)) : 0;
+        
+        console.log(`      Validation:  ${item.quantity} × ${item.unitPrice} = ${expectedTotal.toFixed(2)}`);
+        if (difference < 0.10) {
+          console.log(`      ✅ ACCURATE (${accuracy.toFixed(1)}% match)`);
+        } else if (difference < 1.00) {
+          console.log(`      ⚠️  CLOSE (${accuracy.toFixed(1)}% match, diff: QR ${difference.toFixed(2)})`);
+        } else {
+          console.log(`      ❌ MISMATCH (${accuracy.toFixed(1)}% match, diff: QR ${difference.toFixed(2)})`);
+        }
+      });
+    } else {
+      console.log("   No items extracted");
+    }
+    
+    console.log("\n" + "=".repeat(80));
     
     // Validate and correct items with math validation
+    console.log("\n🔍 VALIDATING & CORRECTING EXTRACTED DATA:");
+    console.log("-".repeat(80));
+    
     const validatedItems = (result.items || []).map((item: any, index: number) => {
-      // Quantity is from QTY column - extract as-is, don't calculate from CRT/PCS
+      // Quantity is calculated from QTY CRT/PCS format
       let quantity: number;
-      let uom: string | null = item.uom || null;
       let crtQty: number | null = item.crtQty || null;
       let pcsQty: number | null = item.pcsQty || null;
       
-      // Convert UOM to string if it's a number (from UOM column)
-      if (uom !== null && typeof uom === 'number') {
-        uom = String(uom);
-        console.log(`📝 UOM column contains number: converting ${item.uom} to string "${uom}"`);
-      }
-      
-      if (typeof item.quantity === 'string') {
-        // Extract numeric part only (remove any text like "PCS", "CRT")
-        const numMatch = item.quantity.match(/\d+(?:\.\d+)?/);
-        quantity = numMatch ? parseFloat(numMatch[0]) : NaN;
-        
-        // Extract UOM from quantity string if not already provided
-        if (!uom) {
-          const uomMatch = item.quantity.match(/\b(CRT|PCS|CS|BOX|EA|PKG|BTL|CASE|CTN)\b/i);
-          if (uomMatch) {
-            uom = uomMatch[1].toUpperCase();
-          }
-        }
-      } else {
-        // Quantity is already a number - use it as-is
-        quantity = Number(item.quantity);
-      }
+      // Use the quantity already calculated by AI (based on which price was used)
+      quantity = Number(item.quantity) || 0;
       
       // Validate quantity
       if (!isFinite(quantity) || quantity <= 0) {
@@ -388,55 +1126,42 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
         quantity = 1;
       }
       
-      // Ensure UOM is uppercase if present
-      if (uom) {
-        uom = uom.toUpperCase();
-      }
-      
-      // CRT/PCS values are informational only - don't modify quantity
-      if (crtQty && pcsQty) {
-        console.log(`📦 Item ${index + 1}: CRT/PCS info: ${crtQty}/${pcsQty} (packing info only, quantity=${quantity})`);
+      // CRT/PCS values show the breakdown
+      if (crtQty !== null && pcsQty !== null) {
+        console.log(`📦 Item ${index + 1}: CRT/PCS info: ${crtQty}/${pcsQty} → calculated quantity=${quantity})`);
       }
       
       const totalPrice = Number(item.totalPrice) || 0;
       let unitPrice = Number(item.unitPrice) || 0;
       
-      console.log(`🔍 Item ${index + 1} - Raw extraction:`, {
-        name: item.productName,
-        qty: quantity,
-        uom: uom,
-        crtQty: crtQty,
-        pcsQty: pcsQty,
-        format: crtQty && pcsQty ? `${crtQty}/${pcsQty}` : 'standard',
-        sku: item.sku || 'none',
-        barcode: item.barcode || 'none',
-        unitPrice: unitPrice,
-        total: totalPrice
-      });
-      
-      console.log(`   → Display: ${quantity}${uom ? ' ' + uom : ''} ${crtQty && pcsQty ? `(${crtQty}/${pcsQty})` : ''} @ ${unitPrice} = ${totalPrice}`);
+      console.log(`\n   📝 Item ${index + 1}: ${item.productName}`);
+      console.log(`      Raw Data: Qty=${quantity}${crtQty !== null && pcsQty !== null ? ` (CRT/PCS: ${crtQty}/${pcsQty})` : ''}, Unit=QR ${unitPrice}, Total=QR ${totalPrice}`);
       
       // CRITICAL: Validate math - if unit price × quantity doesn't match total, recalculate
       const calculatedTotal = unitPrice * quantity;
       const difference = Math.abs(calculatedTotal - totalPrice);
       const tolerance = 0.10; // 10 cent tolerance for rounding
+      const accuracyPercent = totalPrice > 0 ? ((1 - Math.min(difference / totalPrice, 1)) * 100) : 0;
+      
+      console.log(`      Math Check: ${quantity} × QR ${unitPrice} = QR ${calculatedTotal.toFixed(2)} vs Total QR ${totalPrice}`);
       
       // Check for common extraction errors
       if (difference > tolerance && totalPrice > 0 && quantity > 0) {
+        console.log(`      ⚠️  Mismatch detected! Difference: QR ${difference.toFixed(2)} (${accuracyPercent.toFixed(1)}% accuracy)`);
+        
         // Math doesn't match - check if values were swapped
         
         // Pattern 1: Check if unitPrice and totalPrice were swapped
         if (Math.abs(quantity * totalPrice - unitPrice) < tolerance) {
-          console.warn(`⚠️ Item ${index + 1}: Detected swap - unitPrice and totalPrice were reversed`);
+          console.log(`      🔧 AUTO-FIX: Unit Price and Total Price were swapped!`);
           const temp = unitPrice;
           unitPrice = totalPrice;
           // Don't swap totalPrice - recalculate it
           const correctedTotal = quantity * unitPrice;
-          console.warn(`   Corrected: qty=${quantity}, unitPrice=${unitPrice}, total=${correctedTotal.toFixed(2)}`);
+          console.log(`      ✅ Corrected: Qty=${quantity}, Unit Price=QR ${unitPrice}, Total=QR ${correctedTotal.toFixed(2)}`);
           return {
             productName: item.productName || "Unknown Product",
             quantity: quantity,
-            uom: uom,
             crtQty: crtQty,
             pcsQty: pcsQty,
             unitPrice: parseFloat(unitPrice.toFixed(2)),
@@ -454,70 +1179,110 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
           if (Math.abs(testCalc - totalPrice) < tolerance) {
             // Already correct, just recalculate unit price from total
             const correctedUnitPrice = totalPrice / quantity;
-            console.warn(`⚠️ Item ${index + 1}: Math mismatch - recalculating unit price`);
-            console.warn(`   Original: qty=${quantity}, unitPrice=${unitPrice}, total=${totalPrice}`);
-            console.warn(`   Corrected: qty=${quantity}, unitPrice=${correctedUnitPrice.toFixed(2)}, total=${totalPrice}`);
+            console.log(`      🔧 AUTO-FIX: Recalculating Unit Price from Total`);
+            console.log(`      ✅ Corrected: Qty=${quantity}, Unit Price=QR ${correctedUnitPrice.toFixed(2)}, Total=QR ${totalPrice}`);
             unitPrice = parseFloat(correctedUnitPrice.toFixed(2));
           }
         } else {
           // Math doesn't match - recalculate unit price from total
           const correctedUnitPrice = totalPrice / quantity;
-          console.warn(`⚠️ Item ${index + 1}: Math correction for "${item.productName}"`);
-          console.warn(`   Original: qty=${quantity}, unitPrice=${unitPrice}, total=${totalPrice}, calculated=${calculatedTotal.toFixed(2)}`);
-          console.warn(`   Corrected: qty=${quantity}, unitPrice=${correctedUnitPrice.toFixed(2)}, total=${totalPrice}`);
+          console.log(`      🔧 AUTO-FIX: Recalculating Unit Price from Total ÷ Quantity`);
+          console.log(`      ✅ Corrected: Qty=${quantity}, Unit Price=QR ${correctedUnitPrice.toFixed(2)}, Total=QR ${totalPrice}`);
           unitPrice = parseFloat(correctedUnitPrice.toFixed(2));
         }
       } else if (unitPrice === 0 && totalPrice > 0 && quantity > 0) {
         // Unit price is zero but we have total and quantity - calculate it
         unitPrice = parseFloat((totalPrice / quantity).toFixed(2));
-        console.log(`✅ Item ${index + 1}: Calculated unit price for "${item.productName}": ${unitPrice} (from ${totalPrice} ÷ ${quantity})`);
+        console.log(`      🔧 AUTO-FIX: Calculated Unit Price = Total ÷ Quantity`);
+        console.log(`      ✅ Result: QR ${unitPrice} = QR ${totalPrice} ÷ ${quantity}`);
       } else if (totalPrice === 0 && unitPrice > 0 && quantity > 0) {
         // Total price is zero but we have unit price and quantity - calculate it
         const calculatedTotal = unitPrice * quantity;
-        console.log(`✅ Item ${index + 1}: Calculated total price for "${item.productName}": ${calculatedTotal.toFixed(2)} (from ${quantity} × ${unitPrice})`);
+        console.log(`      🔧 AUTO-FIX: Calculated Total Price = Quantity × Unit Price`);
+        console.log(`      ✅ Result: QR ${calculatedTotal.toFixed(2)} = ${quantity} × QR ${unitPrice}`);
         return {
           productName: item.productName || "Unknown Product",
           quantity: quantity,
-          uom: uom,
           crtQty: crtQty,
           pcsQty: pcsQty,
-          unitPrice: unitPrice,
+          unitPrice: parseFloat(unitPrice.toFixed(2)),
           totalPrice: parseFloat(calculatedTotal.toFixed(2)),
           sku: item.sku || null,
           barcode: item.barcode || null
         };
+      } else {
+        console.log(`      ✅ ACCURATE: Math validated (${accuracyPercent.toFixed(1)}% accuracy)`);
       }
       
       // Final validation: ensure total = quantity × unitPrice
       const finalTotal = parseFloat((quantity * unitPrice).toFixed(2));
-      if (Math.abs(finalTotal - totalPrice) > tolerance) {
+      const finalDiff = Math.abs(finalTotal - totalPrice);
+      if (finalDiff > tolerance) {
         // Use calculated total if it's more accurate
-        console.warn(`⚠️ Item ${index + 1}: Final total mismatch, using calculated total ${finalTotal} instead of ${totalPrice}`);
+        console.log(`      🔧 FINAL FIX: Using calculated total QR ${finalTotal} (was QR ${totalPrice}, diff: QR ${finalDiff.toFixed(2)})`);
         return {
           productName: item.productName || "Unknown Product",
           quantity: quantity,
-          uom: uom,
           crtQty: crtQty,
           pcsQty: pcsQty,
-          unitPrice: unitPrice,
+          unitPrice: parseFloat(unitPrice.toFixed(2)),
           totalPrice: finalTotal,
           sku: item.sku || null,
           barcode: item.barcode || null
         };
       }
       
+      // Ensure unit price is always formatted to 2 decimal places
+      const formattedUnitPrice = parseFloat(unitPrice.toFixed(2));
+      const formattedTotalPrice = parseFloat(totalPrice.toFixed(2));
+      
       return {
         productName: item.productName || "Unknown Product",
         quantity: quantity,
-        uom: uom,
         crtQty: crtQty,
         pcsQty: pcsQty,
-        unitPrice: unitPrice,
-        totalPrice: totalPrice,
+        unitPrice: formattedUnitPrice,
+        totalPrice: formattedTotalPrice,
         sku: item.sku || null,
         barcode: item.barcode || null
       };
     });
+    
+    console.log("\n" + "=".repeat(80));
+    console.log("📊 VALIDATION SUMMARY:");
+    console.log("-".repeat(80));
+    
+    // Calculate overall accuracy
+    let totalItemsCount = validatedItems.length;
+    let accurateItems = 0;
+    let correctedItems = 0;
+    let totalAccuracySum = 0;
+    
+    validatedItems.forEach((item: any) => {
+      const calculatedTotal = item.quantity * item.unitPrice;
+      const actualTotal = item.totalPrice;
+      const diff = Math.abs(calculatedTotal - actualTotal);
+      const accuracy = actualTotal > 0 ? ((1 - Math.min(diff / actualTotal, 1)) * 100) : 100;
+      
+      totalAccuracySum += accuracy;
+      
+      if (diff < 0.10) {
+        accurateItems++;
+      } else {
+        correctedItems++;
+      }
+    });
+    
+    const overallAccuracy = totalItemsCount > 0 ? (totalAccuracySum / totalItemsCount) : 0;
+    
+    console.log(`   Total Items Extracted:  ${totalItemsCount}`);
+    console.log(`   ✅ Accurate Items:      ${accurateItems} (${totalItemsCount > 0 ? ((accurateItems/totalItemsCount)*100).toFixed(1) : 0}%)`);
+    if (correctedItems > 0) {
+      console.log(`   🔧 Auto-corrected:      ${correctedItems} (${totalItemsCount > 0 ? ((correctedItems/totalItemsCount)*100).toFixed(1) : 0}%)`);
+    }
+    console.log(`   📈 Overall Accuracy:    ${overallAccuracy.toFixed(1)}%`);
+    console.log(`   🤖 AI Confidence:       ${Math.round((result.confidence || 0) * 100)}%`);
+    console.log("=".repeat(80) + "\n");
     
     // Parse and validate invoice date with better format handling
     let invoiceDate = result.invoiceDate;
@@ -547,20 +1312,8 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
       invoiceDate = new Date().toISOString().split('T')[0];
     }
     
-    console.log("✅ Validated Items:", validatedItems.map((item: any) => ({
-      name: item.productName,
-      qty: item.quantity,
-      uom: item.uom,
-      crtPcs: item.crtQty && item.pcsQty ? `${item.crtQty}/${item.pcsQty}` : null,
-      sku: item.sku,
-      barcode: item.barcode,
-      unitPrice: item.unitPrice,
-      total: item.totalPrice,
-      check: `${item.quantity}${item.uom ? ' ' + item.uom : ''}${item.crtQty && item.pcsQty ? ` (${item.crtQty}×${item.pcsQty})` : ''} × ${item.unitPrice} = ${item.totalPrice}`
-    })));
-    
     // Validate and structure the response
-    return {
+    const finalResult = {
       invoiceNumber: result.invoiceNumber || `INV-${Date.now()}`,
       supplierName: result.supplierName || "Unknown Supplier",
       invoiceDate: invoiceDate,
@@ -571,6 +1324,10 @@ export async function extractInvoiceData(base64Image: string, isReturn: boolean 
       items: validatedItems,
       confidence: Math.min(Math.max(Number(result.confidence) || 0.8, 0), 1)
     };
+    
+    console.log("\n✅ FINAL INVOICE DATA READY FOR PROCESSING\n");
+    
+    return finalResult;
   } catch (error) {
     console.error("❌ Error extracting invoice data:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);

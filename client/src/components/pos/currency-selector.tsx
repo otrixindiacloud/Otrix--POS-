@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
   Select,
@@ -15,43 +15,65 @@ interface CurrencySelectorProps {
   currentCurrency?: string;
 }
 
+interface ExchangeRate {
+  fromCurrency: string;
+  toCurrency: string;
+  rate: string;
+}
+
+// Define currencies outside component to prevent recreation
+const CURRENCIES = [
+  { code: "QAR", symbol: "QR", name: "Qatari Riyal" },
+  { code: "AED", symbol: "AED", name: "UAE Dirham" },
+  { code: "SAR", symbol: "SR", name: "Saudi Riyal" },
+  { code: "KWD", symbol: "KD", name: "Kuwaiti Dinar" },
+  { code: "BHD", symbol: "BD", name: "Bahraini Dinar" },
+  { code: "USD", symbol: "USD", name: "US Dollar" },
+  { code: "EUR", symbol: "€", name: "Euro" },
+  { code: "GBP", symbol: "£", name: "British Pound" },
+] as const;
+
 export default function CurrencySelector({ onCurrencyChange, currentCurrency = "QAR" }: CurrencySelectorProps) {
   const [selectedCurrency, setSelectedCurrency] = useState(currentCurrency);
 
-  interface ExchangeRate {
-    fromCurrency: string;
-    toCurrency: string;
-    rate: string;
-  }
-
   const { data: exchangeRates = [] } = useQuery<ExchangeRate[]>({
     queryKey: ["/api/currency-rates"],
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes to reduce refetching
   });
 
-  const currencies = [
-    { code: "QAR", symbol: "QR", name: "Qatari Riyal" },
-    { code: "AED", symbol: "AED", name: "UAE Dirham" },
-    { code: "SAR", symbol: "SR", name: "Saudi Riyal" },
-    { code: "KWD", symbol: "KD", name: "Kuwaiti Dinar" },
-    { code: "BHD", symbol: "BD", name: "Bahraini Dinar" },
-    { code: "USD", symbol: "USD", name: "US Dollar" },
-    { code: "EUR", symbol: "€", name: "Euro" },
-    { code: "GBP", symbol: "£", name: "British Pound" },
-  ];
-
-  const handleCurrencyChange = (currency: string) => {
+  // Stabilize the change handler
+  const handleCurrencyChange = useCallback((currency: string) => {
     setSelectedCurrency(currency);
     onCurrencyChange?.(currency);
-  };
+  }, [onCurrencyChange]);
 
-  // Get current exchange rate for display
-  const getCurrentRate = () => {
+  // Memoize exchange rates map
+  const ratesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    exchangeRates.forEach((rate: ExchangeRate) => {
+      if (rate.fromCurrency === "QAR") {
+        map.set(rate.toCurrency, parseFloat(rate.rate));
+      }
+    });
+    return map;
+  }, [exchangeRates]);
+
+  // Get current exchange rate
+  const getCurrentRate = useMemo(() => {
     if (selectedCurrency === "QAR") return 1;
-    const rate = exchangeRates.find((r: ExchangeRate) => 
-      r.fromCurrency === "QAR" && r.toCurrency === selectedCurrency
-    );
-    return rate ? parseFloat(rate.rate) : 1;
-  };
+    return ratesMap.get(selectedCurrency) ?? 1;
+  }, [selectedCurrency, ratesMap]);
+
+  // Pre-compute currency items to prevent recalculation during render
+  const currencyItems = useMemo(() => {
+    return CURRENCIES.map((currency) => {
+      const rate = currency.code === "QAR" ? 1 : (ratesMap.get(currency.code) ?? 1);
+      return {
+        ...currency,
+        rate,
+      };
+    });
+  }, [ratesMap]);
 
   return (
     <div className="flex items-center space-x-2">
@@ -68,7 +90,7 @@ export default function CurrencySelector({ onCurrencyChange, currentCurrency = "
           <SelectValue />
         </SelectTrigger>
         <SelectContent className="min-w-[140px]">
-          {currencies.map((currency) => (
+          {currencyItems.map((currency) => (
             <SelectItem key={currency.code} value={currency.code}>
               <div className="flex items-center justify-between w-full">
                 <div className="flex items-center space-x-2">
@@ -77,7 +99,7 @@ export default function CurrencySelector({ onCurrencyChange, currentCurrency = "
                 </div>
                 {currency.code !== "QAR" && (
                   <span className="text-xs text-muted-foreground ml-2">
-                    ≈{getCurrentRate().toFixed(3)}
+                    ≈{currency.rate.toFixed(3)}
                   </span>
                 )}
               </div>
@@ -88,7 +110,7 @@ export default function CurrencySelector({ onCurrencyChange, currentCurrency = "
       
       {selectedCurrency !== "QAR" && (
         <Badge variant="secondary" className="text-xs px-2 py-1">
-          Rate: {getCurrentRate().toFixed(3)}
+          Rate: {getCurrentRate.toFixed(3)}
         </Badge>
       )}
     </div>

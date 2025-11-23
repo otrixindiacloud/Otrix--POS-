@@ -65,6 +65,7 @@ export interface IStorage {
   getCustomers(): Promise<Customer[]>;
   getCustomer(id: number): Promise<Customer | undefined>;
   getCustomerByEmail(email: string): Promise<Customer | undefined>;
+  getCustomersByStore(storeId: number): Promise<Customer[]>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: number, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
   deleteCustomer(id: number): Promise<boolean>;
@@ -531,6 +532,42 @@ export class DatabaseStorage implements IStorage {
   async getCustomerByEmail(email: string): Promise<Customer | undefined> {
     const [customer] = await db.select().from(customers).where(eq(customers.email, email));
     return customer || undefined;
+  }
+
+  async getCustomersByStore(storeId: number): Promise<Customer[]> {
+    console.log(`[getCustomersByStore] Fetching customers for store ${storeId}`);
+    
+    // Get distinct customers who have transactions at this store
+    const customerIds = await db
+      .selectDistinct({ customerId: transactions.customerId })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.storeId, storeId),
+          isNotNull(transactions.customerId)
+        )
+      );
+
+    if (customerIds.length === 0) {
+      console.log(`[getCustomersByStore] No customers found for store ${storeId}`);
+      return [];
+    }
+
+    const ids = customerIds.map(row => row.customerId).filter((id): id is number => id !== null);
+    
+    const storeCustomers = await db
+      .select()
+      .from(customers)
+      .where(
+        and(
+          eq(customers.isActive, true),
+          sql`${customers.id} IN ${sql.raw(`(${ids.join(',')})`)}` 
+        )
+      )
+      .orderBy(desc(customers.id));
+
+    console.log(`[getCustomersByStore] Found ${storeCustomers.length} customers for store ${storeId}`);
+    return storeCustomers;
   }
 
   async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
@@ -1766,6 +1803,7 @@ export class DatabaseStorage implements IStorage {
 
   async getProductsByStore(storeId: number): Promise<Product[]> {
     try {
+      console.log(`[Storage] Getting products for store ${storeId}`);
       const results = await db
         .select({
           id: products.id,
@@ -1792,15 +1830,17 @@ export class DatabaseStorage implements IStorage {
           createdAt: products.createdAt,
           updatedAt: products.updatedAt,
         })
-        .from(products)
-        .leftJoin(storeProducts, and(
-          eq(products.id, storeProducts.productId),
-          eq(storeProducts.storeId, storeId)
-        ))
+        .from(storeProducts)
+        .innerJoin(products, eq(products.id, storeProducts.productId))
         .where(
-          eq(products.isActive, true)
-        );
+          and(
+            eq(storeProducts.storeId, storeId),
+            eq(storeProducts.isActive, true),
+            eq(products.isActive, true)
+          )
+        )
       
+      console.log(`[Storage] Found ${results.length} products for store ${storeId}`);
       // Map results to Product format, using store-specific values when available
       return results.map((row) => ({
         id: row.id,
@@ -1809,6 +1849,7 @@ export class DatabaseStorage implements IStorage {
         description: row.description,
         price: row.storePrice || row.basePrice || '0.00',
         cost: row.storeCost || row.baseCost || null,
+        // Use store-specific stock first, then fall back to base stock
         stock: row.storeStock ?? row.baseStock ?? 0,
         quantity: row.quantity,
         barcode: row.barcode,
@@ -1826,6 +1867,7 @@ export class DatabaseStorage implements IStorage {
     } catch (error: any) {
       // If error is about missing columns, retry with SQL defaults
       if (error?.code === '42703' && (error?.message?.includes('cost') || error?.message?.includes('stock'))) {
+        console.log(`[Storage] Retrying with default values for store ${storeId}`);
         const results = await db
           .select({
             id: products.id,
@@ -1852,15 +1894,17 @@ export class DatabaseStorage implements IStorage {
             createdAt: products.createdAt,
             updatedAt: products.updatedAt,
           })
-          .from(products)
-          .leftJoin(storeProducts, and(
-            eq(products.id, storeProducts.productId),
-            eq(storeProducts.storeId, storeId)
-          ))
+          .from(storeProducts)
+          .innerJoin(products, eq(products.id, storeProducts.productId))
           .where(
-            eq(products.isActive, true)
+            and(
+              eq(storeProducts.storeId, storeId),
+              eq(storeProducts.isActive, true),
+              eq(products.isActive, true)
+            )
           );
         
+        console.log(`[Storage] Found ${results.length} products for store ${storeId} (with defaults)`);
         // Map results to Product format, using store-specific values when available
         return results.map((row) => ({
           id: row.id,
@@ -1869,6 +1913,7 @@ export class DatabaseStorage implements IStorage {
           description: row.description,
           price: row.storePrice || row.basePrice || '0.00',
           cost: row.storeCost || row.baseCost || null,
+          // Use store-specific stock first, then fall back to base stock
           stock: row.storeStock ?? row.baseStock ?? 0,
           quantity: row.quantity,
           barcode: row.barcode,
@@ -1884,6 +1929,7 @@ export class DatabaseStorage implements IStorage {
           updatedAt: row.updatedAt,
         })) as Product[];
       }
+      console.error(`[Storage] Error getting products for store ${storeId}:`, error);
       throw error;
     }
   }
@@ -2227,96 +2273,71 @@ export class DatabaseStorage implements IStorage {
   async getUserAccessibleStores(userId: number): Promise<StoreAccess[]> {
     const user = await this.getUser(userId);
     if (!user || !user.isActive) {
+      console.log(`[getUserAccessibleStores] User ${userId} not found or inactive`);
       return [];
     }
 
-    const rows = await db
-      .select({
-        id: stores.id,
-        name: stores.name,
-        code: stores.code,
-        address: stores.address,
-        phone: stores.phone,
-        email: stores.email,
-        managerId: stores.managerId,
-        isActive: stores.isActive,
-        settings: stores.settings,
-        baseCurrency: stores.baseCurrency,
-        vatEnabled: stores.vatEnabled,
-        defaultVatRate: stores.defaultVatRate,
-        createdAt: stores.createdAt,
-        updatedAt: stores.updatedAt,
-        assignmentId: userStores.id,
-        canAccess: userStores.canAccess,
-        assignedAt: userStores.assignedAt,
-        assignedBy: userStores.assignedBy,
-      })
+    console.log(`[getUserAccessibleStores] Fetching stores for user ${userId} (role: ${user.role})`);
+
+    // Get all active stores
+    const allActiveStores = await db
+      .select()
       .from(stores)
-      .leftJoin(
-        userStores,
-        and(
-          eq(stores.id, userStores.storeId),
-          eq(userStores.userId, userId)
-        )
-      )
-      .where(
-        and(
-          eq(stores.isActive, true),
-          or(
-            eq(userStores.canAccess, true),
-            and(
-              isNull(userStores.canAccess),
-              isNotNull(userStores.id)
-            ),
-            eq(stores.managerId, userId)
-          )
-        )
-      );
+      .where(eq(stores.isActive, true));
 
-    const accessibleStores = new Map<number, StoreAccess>();
+    console.log(`[getUserAccessibleStores] Found ${allActiveStores.length} active stores`);
 
-    for (const record of rows) {
-  const isManager = record.managerId === userId;
-  const hasAssignment = record.assignmentId !== null && record.assignmentId !== undefined;
-  const assignmentAllowsAccess = record.canAccess !== false;
+    // Get user's store assignments
+    const assignments = await db
+      .select()
+      .from(userStores)
+      .where(eq(userStores.userId, userId));
 
-      const accessType: StoreAccess["accessType"] = assignmentAllowsAccess
-        ? "assignment"
-        : isManager
+    console.log(`[getUserAccessibleStores] Found ${assignments.length} assignments for user ${userId}`);
+
+    const accessibleStores: StoreAccess[] = [];
+
+    for (const store of allActiveStores) {
+      const assignment = assignments.find(a => a.storeId === store.id);
+      const isManager = store.managerId === userId;
+
+      // Determine access:
+      // 1. If user is the store manager, grant access
+      // 2. If there's an explicit assignment with canAccess=true, grant access
+      // 3. If there's NO assignment at all, grant access (default behavior)
+      // 4. If there's an assignment with canAccess=false, deny access
+
+      const hasExplicitAssignment = assignment !== undefined;
+      const assignmentAllowsAccess = !hasExplicitAssignment || assignment.canAccess !== false;
+      const hasAccess = isManager || assignmentAllowsAccess;
+
+      if (hasAccess) {
+        const accessType: StoreAccess["accessType"] = isManager
           ? "manager"
-          : "assignment";
+          : hasExplicitAssignment
+            ? "assignment"
+            : "default";
 
-      accessibleStores.set(record.id, {
-        id: record.id,
-        name: record.name,
-        code: record.code,
-        address: record.address,
-        phone: record.phone,
-        email: record.email,
-        managerId: record.managerId,
-        isActive: record.isActive,
-        settings: record.settings,
-        baseCurrency: record.baseCurrency,
-        vatEnabled: record.vatEnabled,
-        defaultVatRate: record.defaultVatRate,
-        createdAt: record.createdAt,
-        updatedAt: record.updatedAt,
-        assignmentId: hasAssignment ? record.assignmentId! : null,
-        canAccess: hasAssignment ? record.canAccess ?? null : null,
-        assignedAt: hasAssignment ? record.assignedAt ?? null : null,
-        assignedBy: hasAssignment ? record.assignedBy ?? null : null,
-        accessType,
-      });
+        accessibleStores.push({
+          ...store,
+          assignmentId: assignment?.id ?? null,
+          canAccess: assignment?.canAccess ?? null,
+          assignedAt: assignment?.assignedAt ?? null,
+          assignedBy: assignment?.assignedBy ?? null,
+          accessType,
+        });
+      }
     }
 
-    const result = Array.from(accessibleStores.values());
-    result.sort((a, b) => {
+    // Sort stores: default store first, then alphabetically
+    accessibleStores.sort((a, b) => {
       if (user.defaultStoreId && a.id === user.defaultStoreId) return -1;
       if (user.defaultStoreId && b.id === user.defaultStoreId) return 1;
       return a.name.localeCompare(b.name);
     });
 
-    return result;
+    console.log(`[getUserAccessibleStores] Returning ${accessibleStores.length} accessible stores for user ${userId}`);
+    return accessibleStores;
   }
 
   async updateUserStoreAccess(userId: number, storeId: number, canAccess: boolean): Promise<UserStore | undefined> {

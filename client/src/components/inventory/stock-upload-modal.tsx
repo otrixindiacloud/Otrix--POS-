@@ -59,14 +59,16 @@ export default function StockUploadModal({ isOpen, onClose }: StockUploadModalPr
       console.log('✅ Upload result:', result);
       return result;
     },
-    onSuccess: (result: UploadResult) => {
+    onSuccess: async (result: UploadResult) => {
       setUploadResult(result);
       if (result.success) {
         toast({
           title: "Stock Upload Successful",
           description: `Processed ${result.processedCount} items. ${result.newProductsCount} new products added, ${result.updatedProductsCount} products updated.`,
         });
-        queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+        // Invalidate and refetch to ensure UI updates immediately
+        await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/products"] });
       } else {
         toast({
           title: "Upload Completed with Errors",

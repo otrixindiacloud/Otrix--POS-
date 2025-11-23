@@ -7,8 +7,25 @@ import { searchProductWithAI } from "../../openai-service";
 
 export function registerInventoryRoutes(app: Express) {
   app.get("/api/products", async (req, res) => {
-    const products = await storage.getProducts();
-    res.json(products);
+    try {
+      const storeId = req.query.storeId ? parseInt(req.query.storeId as string) : undefined;
+      
+      if (storeId) {
+        console.log(`[Products API] Fetching products for store ${storeId}`);
+        // Get products available at this store
+        const products = await storage.getProductsByStore(storeId);
+        console.log(`[Products API] Found ${products.length} products for store ${storeId}`);
+        res.json(products);
+      } else {
+        // No store filter - return all products (backwards compatibility)
+        console.log('[Products API] Fetching all products (no store filter)');
+        const products = await storage.getProducts();
+        res.json(products);
+      }
+    } catch (error) {
+      console.error('[Products API] Error:', error);
+      res.status(500).json({ message: "Failed to fetch products" });
+    }
   });
 
   app.get("/api/products/recent", async (req, res) => {
