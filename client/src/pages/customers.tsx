@@ -41,17 +41,25 @@ export default function Customers() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [creditModalTab, setCreditModalTab] = useState<"new" | "history">("new");
 
+  console.log('[Customers Page] Current store:', currentStore);
+  
   const storeQueryParam = currentStore?.id ? `?storeId=${currentStore.id}` : "";
+  console.log('[Customers Page] Store query param:', storeQueryParam);
 
   const { data: customers = [], isLoading, refetch: refetchCustomers } = useQuery<Customer[]>({
     queryKey: ["/api/customers", currentStore?.id],
     queryFn: async () => {
+      console.log('[Customers Page] Fetching customers for store:', currentStore?.id);
+      console.log('[Customers Page] API URL:', `/api/customers${storeQueryParam}`);
       const response = await fetch(`/api/customers${storeQueryParam}`);
       if (!response.ok) throw new Error('Failed to fetch customers');
-      return response.json();
+      const data = await response.json();
+      console.log('[Customers Page] Received customers:', data.length, data);
+      return data;
     },
-    enabled: !!currentStore,
+    enabled: !!currentStore?.id, // Only fetch when a store is selected
     refetchOnMount: true,
+    refetchOnWindowFocus: true,
     staleTime: 0, // Always fetch fresh data
   });
 
@@ -76,9 +84,11 @@ export default function Customers() {
     setShowCreditModal(true);
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = async () => {
     setShowCustomerModal(false);
     setSelectedCustomer(null);
+    // Refetch customers to show the newly created/edited customer immediately
+    await refetchCustomers();
   };
 
   const handleCloseViewDialog = () => {
@@ -86,9 +96,11 @@ export default function Customers() {
     setSelectedCustomer(null);
   };
 
-  const handleCloseEditDialog = () => {
+  const handleCloseEditDialog = async () => {
     setShowEditDialog(false);
     setSelectedCustomer(null);
+    // Refetch customers to show the updated customer immediately
+    await refetchCustomers();
   };
 
   const handleCloseCreditModal = async () => {
@@ -111,6 +123,10 @@ export default function Customers() {
     customer.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     customer.phone?.includes(searchQuery)
   );
+
+  console.log('[Customers Page] Total customers:', customers.length);
+  console.log('[Customers Page] Filtered customers:', filteredCustomers.length);
+  console.log('[Customers Page] Is loading:', isLoading);
 
   // Check if customer is newly created (within last 5 entries)
   const isNewCustomer = (customerId: number) => {
@@ -143,21 +159,6 @@ export default function Customers() {
       </Button>
     </div>
   );
-
-  // Show message when no store is selected
-  if (!currentStore) {
-    return (
-      <MainLayout headerActions={undefined}>
-        <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center">
-          <User className="h-16 w-16 text-muted-foreground mb-4" />
-          <h2 className="text-2xl font-semibold mb-2">No Store Selected</h2>
-          <p className="text-muted-foreground mb-6 max-w-md">
-            Please select a store to view customers. Each store has its own customer list based on transaction history.
-          </p>
-        </div>
-      </MainLayout>
-    );
-  }
 
   return (
     <MainLayout 
@@ -365,15 +366,21 @@ export default function Customers() {
         <div className="text-center py-12">
           <User className="w-12 h-12 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-600 mb-2">
-            {searchQuery ? "No customers found" : "No customers yet"}
+            {!currentStore?.id 
+              ? "Please select a store"
+              : searchQuery 
+              ? "No customers found" 
+              : "No customers yet"}
           </h3>
           <p className="text-slate-500 mb-4">
-            {searchQuery 
+            {!currentStore?.id
+              ? "Select a store from the top right to view and manage customers"
+              : searchQuery 
               ? "Try adjusting your search terms" 
-              : "Start by adding your first customer"
+              : "Start by adding your first customer to this store"
             }
           </p>
-          {!searchQuery && (
+          {!searchQuery && currentStore?.id && (
             <Button onClick={handleAddCustomer}>
               <Plus className="w-4 h-4 mr-2" />
               Add First Customer
@@ -399,7 +406,11 @@ export default function Customers() {
 
       <CustomerUploadModal
         isOpen={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
+        onClose={async () => {
+          setShowUploadModal(false);
+          // Refetch customers to show the newly uploaded customers immediately
+          await refetchCustomers();
+        }}
       />
 
       {/* View Customer Dialog */}
@@ -534,32 +545,14 @@ export default function Customers() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Customer Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center justify-between pr-8">
-              <DialogTitle className="text-2xl font-bold">Edit Customer</DialogTitle>
-              {selectedCustomer && (
-                <Badge variant="outline" className="text-sm">
-                  ID: {selectedCustomer.id}
-                </Badge>
-              )}
-            </div>
-            <DialogDescription>
-              Update customer information and credit settings
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedCustomer && (
-            <CustomerModal
-              isOpen={showEditDialog}
-              onClose={handleCloseEditDialog}
-              customer={selectedCustomer}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Edit Customer Modal */}
+      {showEditDialog && selectedCustomer && (
+        <CustomerModal
+          isOpen={showEditDialog}
+          onClose={handleCloseEditDialog}
+          customer={selectedCustomer}
+        />
+      )}
       </div>
     </MainLayout>
   );

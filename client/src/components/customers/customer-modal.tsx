@@ -14,6 +14,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useStore } from "@/hooks/useStore";
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export default function CustomerModal({ isOpen, onClose, customer }: CustomerMod
   const [profileImagePreview, setProfileImagePreview] = useState<string>("");
   const [idCardImagePreview, setIdCardImagePreview] = useState<string>("");
   const { toast } = useToast();
+  const { currentStore } = useStore();
 
   const form = useForm({
     resolver: zodResolver(insertCustomerSchema.extend({
@@ -116,6 +118,17 @@ export default function CustomerModal({ isOpen, onClose, customer }: CustomerMod
   const handleSubmit = async (data: any) => {
     setIsLoading(true);
     try {
+      // Ensure a store is selected before creating a customer
+      if (!customer && !currentStore?.id) {
+        toast({
+          title: "Error",
+          description: "Please select a store before creating a customer.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       let profileImageUrl = customer?.profileImage || "";
       let idCardImageUrl = customer?.idCardImage || "";
 
@@ -133,6 +146,8 @@ export default function CustomerModal({ isOpen, onClose, customer }: CustomerMod
         ...data,
         profileImage: profileImageUrl,
         idCardImage: idCardImageUrl,
+        // Set storeId for new customers, keep existing storeId for updates
+        storeId: customer?.storeId || currentStore?.id,
       };
 
       if (customer) {
@@ -159,7 +174,10 @@ export default function CustomerModal({ isOpen, onClose, customer }: CustomerMod
         });
       }
 
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      // Invalidate all customer queries (including store-specific ones)
+      await queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      // Also refetch to ensure immediate update
+      await queryClient.refetchQueries({ queryKey: ["/api/customers"] });
       handleClose();
     } catch (error) {
       console.error("Error saving customer:", error);

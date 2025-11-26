@@ -95,7 +95,32 @@ export function registerInventoryRoutes(app: Express) {
   app.post("/api/products", async (req, res) => {
     try {
       const productData = insertProductSchema.parse(req.body);
+      const storeId = req.query.storeId ? parseInt(req.query.storeId as string) : req.body.storeId;
+      
+      // Create the product
       const product = await storage.createProduct(productData);
+      
+      // If storeId is provided, also create a storeProduct entry
+      if (storeId) {
+        console.log(`[Products API] Creating storeProduct for product ${product.id} in store ${storeId}`);
+        try {
+          await storage.createStoreProduct({
+            storeId: storeId,
+            productId: product.id,
+            price: product.price,
+            costPrice: product.cost || null,
+            stockQuantity: product.stock?.toString() || "0",
+            isActive: true,
+          });
+          console.log(`[Products API] Successfully added product ${product.id} to store ${storeId}`);
+        } catch (storeProductError) {
+          console.error(`[Products API] Error adding product to store:`, storeProductError);
+          // Don't fail the entire request if storeProduct creation fails
+        }
+      } else {
+        console.warn(`[Products API] No storeId provided, product ${product.id} not added to any store`);
+      }
+      
       res.status(201).json(product);
     } catch (error) {
       res.status(400).json({ message: "Invalid product data", error });
@@ -105,6 +130,7 @@ export function registerInventoryRoutes(app: Express) {
   app.post("/api/products/bulk", async (req, res) => {
     try {
       const { products } = req.body;
+      const storeId = req.query.storeId ? parseInt(req.query.storeId as string) : req.body.storeId;
       
       if (!Array.isArray(products)) {
         return res.status(400).json({ message: "products must be an array" });
@@ -144,6 +170,24 @@ export function registerInventoryRoutes(app: Express) {
           });
           
           const product = await storage.createProduct(validatedData);
+          
+          // If storeId is provided, also create a storeProduct entry
+          if (storeId) {
+            try {
+              await storage.createStoreProduct({
+                storeId: storeId,
+                productId: product.id,
+                price: product.price,
+                costPrice: product.cost || null,
+                stockQuantity: product.stock?.toString() || "0",
+                isActive: true,
+              });
+              console.log(`[Bulk Import] Added product ${product.id} to store ${storeId}`);
+            } catch (storeProductError) {
+              console.error(`[Bulk Import] Error adding product ${product.id} to store:`, storeProductError);
+            }
+          }
+          
           createdProducts.push(product);
         } catch (error: any) {
           console.error(`Error creating product ${productData.name}:`, error);

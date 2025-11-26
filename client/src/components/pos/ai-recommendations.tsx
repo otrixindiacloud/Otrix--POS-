@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePOSStore } from "@/lib/pos-store";
+import { useStore } from "@/hooks/useStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,7 @@ import type { Product } from "@shared/schema";
 
 export default function AIRecommendations() {
   const { cartItems, currentCustomer, addToCart } = usePOSStore();
+  const { currentStore } = useStore();
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Get customer purchase history for AI recommendations
@@ -55,7 +57,7 @@ export default function AIRecommendations() {
   });
 
   const handleAddRecommendation = (product: Product) => {
-    addToCart(product);
+    addToCart(product, 1, currentStore?.id);
   };
 
   if (cartItems.length === 0 && !currentCustomer) {

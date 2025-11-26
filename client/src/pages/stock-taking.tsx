@@ -43,6 +43,7 @@ import { format } from "date-fns";
 import MainLayout from "@/components/layout/main-layout";
 import { Link } from "wouter";
 import { BarcodeScanner } from "@/components/ui/barcode-scanner";
+import { useStore } from "@/hooks/useStore";
 
 interface StockTakingItem {
   id?: number;
@@ -88,6 +89,7 @@ export default function StockTaking() {
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentStore } = useStore();
 
   // Get stock taking sessions for comparison
   const { data: sessions = [] } = useQuery({
@@ -107,8 +109,9 @@ export default function StockTaking() {
     ],
     enabled: activeTab === "compare",
     queryFn: async (): Promise<ComparisonItem[]> => {
+      const storeParam = currentStore?.id ? `&storeId=${currentStore.id}` : '';
       const response = await fetch(
-        `/api/stock-taking/comparison?date=${comparisonDate.toISOString().split("T")[0]}`,
+        `/api/stock-taking/comparison?date=${comparisonDate.toISOString().split("T")[0]}${storeParam}`,
       );
       if (!response.ok) throw new Error("Failed to fetch comparison data");
       const data = (await response.json()) as ComparisonItem[];
@@ -138,7 +141,7 @@ export default function StockTaking() {
       const response = await fetch("/api/stock-taking/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, storeId: currentStore?.id }),
       });
       if (!response.ok) throw new Error("Failed to submit stock taking");
       return response.json();

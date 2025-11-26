@@ -2,10 +2,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { CartItem, Customer, Product, DayOperation } from '@shared/schema';
 
+// Extended CartItem with storeId for multi-store support
+interface ExtendedCartItem extends CartItem {
+  storeId?: number | null;
+}
+
 interface POSState {
   // Cart state
-  cartItems: CartItem[];
+  cartItems: ExtendedCartItem[];
   currentCustomer: Customer | null;
+  currentStoreId: number | null; // Track current store in POS state
   
   // Day state
   currentDay: DayOperation | null;
@@ -30,7 +36,9 @@ interface POSState {
   isDayOpenModalOpen: boolean;
   
   // Actions
-  addToCart: (product: Product, quantity?: number) => void;
+  addToCart: (product: Product, quantity?: number, storeId?: number | null) => void;
+  setCurrentStoreId: (storeId: number | null) => void;
+  filterCartByStore: (storeId: number | null, itemsToFilter?: ExtendedCartItem[]) => void;
   removeFromCart: (productId: number | null, sku?: string) => void;
   updateCartItemQuantity: (productId: number | null, sku: string, quantity: number) => void;
   updateCartItemDiscount: (productId: number | null, sku: string, discountValue: string, discountType: 'percentage' | 'fixed') => void;
@@ -71,10 +79,12 @@ interface POSState {
 
 export const usePOSStore = create<POSState>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      return {
       // Initial state
       cartItems: [],
       currentCustomer: null,
+      currentStoreId: null,
       currentDay: null,
       isDayOpen: false,
       selectedDate: new Date().toISOString().split('T')[0], // Default to today
@@ -91,12 +101,22 @@ export const usePOSStore = create<POSState>()(
       isDayOpenModalOpen: false,
       
       // Actions
-      addToCart: (product: Product, quantity = 1) => {
-        console.log('Adding to cart:', product);
+      addToCart: (product: Product, quantity = 1, storeId?: number | null) => {
+        console.log('Adding to cart:', product, 'quantity:', quantity, 'storeId:', storeId);
         
         const state = get();
         const cartItems = state.cartItems;
         const isFirstItem = cartItems.length === 0;
+        
+        // Ensure we have a storeId - either passed in or from current state
+        const effectiveStoreId = storeId ?? state.currentStoreId;
+        console.log('[POS Store] Effective storeId for cart item:', effectiveStoreId);
+        
+        if (!effectiveStoreId) {
+          console.warn('[POS Store] No store selected! Cannot add item to cart without a store.');
+          window.dispatchEvent(new CustomEvent('noStoreSelected'));
+          return;
+        }
         
         // Generate unique bill number when first item is added if not already set
         if (isFirstItem && !state.currentTransactionNumber) {
@@ -154,8 +174,8 @@ export const usePOSStore = create<POSState>()(
           console.log('Updating existing item:', existingItem);
           // Increment quantity by the provided quantity instead of replacing it
           const matchKey = product.id !== null && product.id !== undefined 
-            ? (item: CartItem) => item.productId === product.id
-            : (item: CartItem) => item.sku === productSku && item.productId === null;
+            ? (item: ExtendedCartItem) => item.productId === product.id
+            : (item: ExtendedCartItem) => item.sku === productSku && item.productId === null;
           
           set({
             cartItems: cartItems.map(item => {
@@ -184,12 +204,13 @@ export const usePOSStore = create<POSState>()(
                 ...item,
                 quantity: newQuantity,
                 total: newTotal.toFixed(2),
-                stock: currentStock // Update stock info
+                stock: currentStock, // Update stock info
+                storeId: storeId ?? item.storeId ?? get().currentStoreId // Ensure storeId is preserved/updated
               };
             })
           });
         } else {
-          const newItem: CartItem = {
+          const newItem: ExtendedCartItem = {
             productId: product.id ?? null, // Allow null for custom items
             sku: productSku,
             name: productName,
@@ -199,16 +220,17 @@ export const usePOSStore = create<POSState>()(
             imageUrl: product.imageUrl || undefined,
             vatRate: parseFloat(product.vatRate?.toString() || '0'), // Use product's VAT rate or default to 0%
             stock: currentStock, // Store stock at time of adding
+            storeId: effectiveStoreId, // Track which store this item belongs to
           };
           
-          console.log('Adding new item:', newItem);
+          console.log('[POS Store] Adding new item with storeId:', effectiveStoreId, newItem);
           
           set({
             cartItems: [...cartItems, newItem]
           });
         }
         
-        console.log('Cart updated:', get().cartItems);
+        console.log('[POS Store] Cart updated. Total items:', get().cartItems.length, 'Items:', get().cartItems.map(i => `${i.name} (store: ${i.storeId})`));
         
         // Trigger VAT recalculation when items are added
         window.dispatchEvent(new CustomEvent('cartChanged'));
@@ -493,15 +515,77 @@ export const usePOSStore = create<POSState>()(
         return get().transactionDiscount || 0;
       },
       
+      setCurrentStoreId: (storeId: number | null) => {
+        const currentStoreId = get().currentStoreId;
+        const currentCartItems = get().cartItems;
+        
+        // If store is changing, filter cart items
+        if (currentStoreId !== storeId) {
+          console.log('[POS Store] Store changing from', currentStoreId, 'to', storeId);
+          console.log('[POS Store] Current cart items before filter:', currentCartItems.length, currentCartItems.map(i => `${i.name} (storeId: ${i.storeId})`));
+          
+          // Update store ID first
+          set({ currentStoreId: storeId });
+          
+          // Then filter cart items if we have items
+          if (currentCartItems.length > 0) {
+            // Call filter with the current items snapshot
+            get().filterCartByStore(storeId, currentCartItems);
+          }
+        } else {
+          console.log('[POS Store] Store unchanged, keeping current storeId:', storeId);
+          set({ currentStoreId: storeId });
+        }
+      },
+      
+      filterCartByStore: (storeId: number | null, itemsToFilter?: ExtendedCartItem[]) => {
+        const cartItems = itemsToFilter || get().cartItems;
+        
+        if (!storeId) {
+          // If no store selected, clear all items
+          console.log('[POS Store] No store selected, clearing cart');
+          if (cartItems.length > 0) {
+            set({ cartItems: [] });
+          }
+          return;
+        }
+        
+        // Filter items - ONLY keep items that belong to the current store
+        // Remove all items that don't have a storeId or have a different storeId
+        const filteredItems = cartItems.filter(item => {
+          const itemBelongsToCurrentStore = item.storeId === storeId;
+          if (!itemBelongsToCurrentStore) {
+            console.log(`[POS Store] Removing item "${item.name}" - belongs to store ${item.storeId}, current store is ${storeId}`);
+          }
+          return itemBelongsToCurrentStore;
+        });
+        
+        const removedCount = cartItems.length - filteredItems.length;
+        
+        if (removedCount > 0) {
+          console.log(`[POS Store] Filtered out ${removedCount} items not belonging to store ${storeId}`);
+          set({ cartItems: filteredItems });
+          
+          // Notify user about filtered items
+          window.dispatchEvent(new CustomEvent('cartFilteredByStore', {
+            detail: { removedCount, storeId }
+          }));
+        } else {
+          console.log('[POS Store] All cart items belong to current store');
+        }
+      },
+      
       getCartItemCount: () => {
         return get().cartItems.reduce((sum, item) => sum + item.quantity, 0);
       }
-    }),
+    };
+  },
     {
       name: 'pos-store',
       partialize: (state) => ({
         cartItems: state.cartItems,
         currentCustomer: state.currentCustomer,
+        currentStoreId: state.currentStoreId,
         currentTransactionNumber: state.currentTransactionNumber,
         resumedHeldTransactionId: state.resumedHeldTransactionId,
         transactionDiscount: state.transactionDiscount,

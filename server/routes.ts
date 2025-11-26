@@ -17,7 +17,7 @@ import { assessTransactionRisk, getTransactionRiskHistory, getDailyRiskSummary }
 import fs from "fs";
 import path from "path";
 import * as XLSX from "xlsx";
-import { upload } from "./modules/shared/upload";
+import { upload, imageUpload, dataFileUpload } from "./modules/shared/upload";
 import { requireRole } from "./modules/shared/authorization";
 
 // Define transaction item with product details for receipt generation
@@ -129,8 +129,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               productId: product.id,
               price: product.price || "0.00",
               costPrice: product.cost || "0.00",
-              stockQuantity: product.stock || 0,
-              reorderLevel: 5,
+              stockQuantity: (product.stock || 0).toString(),
+              reorderLevel: "5",
               isActive: true,
             });
 
@@ -1283,19 +1283,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Image upload endpoint
-  app.post("/api/upload/image", upload.single('image'), async (req, res) => {
+  app.post("/api/upload/image", imageUpload.single('image'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No image file provided" });
       }
 
+      console.log('[Image Upload] File uploaded successfully:', req.file.filename);
+      
       // For now, we'll store images in the uploads directory and return the file path
       // In production, you would upload to a cloud storage service like AWS S3
       const imageUrl = `/uploads/${req.file.filename}`;
       
       res.json({ url: imageUrl });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to upload image", error });
+    } catch (error: any) {
+      console.error('[Image Upload] Error:', error);
+      res.status(500).json({ 
+        message: "Failed to upload image", 
+        error: error.message || 'Unknown error occurred' 
+      });
     }
   });
 
@@ -1507,11 +1513,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Stock Upload endpoint
-  app.post("/api/inventory/upload-stock", isAuthenticated, upload.single('file'), async (req, res) => {
+  app.post("/api/inventory/upload-stock", isAuthenticated, dataFileUpload.single('file'), async (req, res) => {
     try {
       console.log('📤 Stock upload request received');
       console.log('  - File:', req.file ? req.file.originalname : 'NO FILE');
       console.log('  - User:', req.user?.username || 'anonymous');
+      
+      // Get storeId from query or body
+      const storeId = req.query.storeId ? parseInt(req.query.storeId as string) : req.body.storeId;
+      
+      if (!storeId) {
+        console.error('❌ No storeId provided');
+        return res.status(400).json({ success: false, message: "Store ID is required" });
+      }
+      
+      console.log('  - Store ID:', storeId);
       
       if (!req.file) {
         console.error('❌ No file uploaded');
@@ -1661,7 +1677,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Create new product
             const sku = `AUTO-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
             
-            await storage.createProduct({
+            const newProduct = await storage.createProduct({
               name,
               sku,
               barcode,
@@ -1672,6 +1688,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
               category: "Imported",
               description: `Imported via stock upload on ${new Date().toLocaleDateString()}`
             });
+            
+            // Add product to store
+            try {
+              await storage.createStoreProduct({
+                storeId: storeId,
+                productId: newProduct.id,
+                price: price.toString(),
+                costPrice: cost.toString(),
+                stockQuantity: qty.toString(),
+                isActive: true,
+              });
+              console.log(`[Stock Upload] Added product ${newProduct.id} to store ${storeId}`);
+            } catch (storeProductError) {
+              console.error(`[Stock Upload] Error adding product ${newProduct.id} to store:`, storeProductError);
+            }
+            
             newProductsCount++;
           }
           
@@ -1755,13 +1787,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Submit stock taking
   app.post("/api/stock-taking/submit", async (req, res) => {
     try {
-      const { items, stockDate } = req.body;
+      const { items, stockDate, storeId } = req.body;
       
       if (!items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ message: "Items array is required" });
       }
 
-      const result = await storage.submitStockTaking(items, stockDate);
+      const result = await storage.submitStockTaking(items, stockDate, storeId);
       res.status(201).json(result);
     } catch (error) {
       console.error("Stock taking submission error:", error);
@@ -1773,11 +1805,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/stock-taking/comparison", async (req, res) => {
     try {
       const date = req.query.date as string;
+      const storeId = req.query.storeId ? parseInt(req.query.storeId as string) : undefined;
+      
       if (!date) {
         return res.status(400).json({ message: "Date parameter is required" });
       }
 
-      const comparisonData = await storage.getStockTakingComparison(date);
+      const comparisonData = await storage.getStockTakingComparison(date, storeId);
       res.json(comparisonData);
     } catch (error) {
       console.error("Stock taking comparison error:", error);

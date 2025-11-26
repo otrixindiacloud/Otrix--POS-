@@ -178,6 +178,7 @@ export const customers = pgTable("customers", {
   idCardImage: text("id_card_image"),
   notes: text("notes"),
   isActive: boolean("is_active").default(true),
+  storeId: integer("store_id").references(() => stores.id), // Store that this customer belongs to
 });
 
 export const suppliers = pgTable("suppliers", {
@@ -613,6 +614,7 @@ export const savedReports = pgTable("saved_reports", {
 
 export const stockTakingSessions = pgTable("stock_taking_sessions", {
   id: serial("id").primaryKey(),
+  storeId: integer("store_id").references(() => stores.id),
   sessionDate: text("session_date").notNull(),
   status: text("status").notNull().default("in_progress"), // in_progress, completed
   totalItems: integer("total_items").default(0),
@@ -626,6 +628,7 @@ export const stockTakingSessions = pgTable("stock_taking_sessions", {
 export const stockTakingItems = pgTable("stock_taking_items", {
   id: serial("id").primaryKey(),
   sessionId: integer("session_id").references(() => stockTakingSessions.id, { onDelete: "cascade" }).notNull(),
+  storeId: integer("store_id").references(() => stores.id),
   productId: integer("product_id").references(() => products.id),
   sku: text("sku").notNull(),
   barcode: text("barcode"),

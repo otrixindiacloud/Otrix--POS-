@@ -12,6 +12,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { getProductTypes, getCategoriesByType, type ProductType, type Category } from "@/config/product-categories";
+import { useStore } from "@/hooks/useStore";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export default function ProductModal({ isOpen, onClose, product }: ProductModalP
   const [selectedProductType, setSelectedProductType] = useState<string>("");
   const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
   const { toast } = useToast();
+  const { currentStore } = useStore();
 
   const productTypes = getProductTypes();
 
@@ -183,6 +185,11 @@ export default function ProductModal({ isOpen, onClose, product }: ProductModalP
       errors.push("Cost is required and must be 0 or greater");
     }
     
+    // Ensure a store is selected for new products
+    if (!product && !currentStore?.id) {
+      errors.push("Please select a store before adding a product");
+    }
+    
     if (errors.length > 0) {
       toast({
         title: "Validation Error",
@@ -217,6 +224,7 @@ export default function ProductModal({ isOpen, onClose, product }: ProductModalP
       const productData = {
         ...data,
         imageUrl: imageUrl || "",
+        storeId: currentStore?.id, // Include storeId for new products
       };
 
       if (product) {

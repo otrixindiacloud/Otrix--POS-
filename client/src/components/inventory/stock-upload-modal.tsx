@@ -16,6 +16,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, Plus, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useStore } from "@/hooks/useStore";
 
 interface StockUploadModalProps {
   isOpen: boolean;
@@ -36,12 +37,18 @@ export default function StockUploadModal({ isOpen, onClose }: StockUploadModalPr
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentStore } = useStore();
 
   const uploadMutation = useMutation({
     mutationFn: async (formData: FormData) => {
       console.log('📤 Uploading stock file...');
       
-      const response = await fetch("/api/inventory/upload-stock", {
+      // Ensure a store is selected
+      if (!currentStore?.id) {
+        throw new Error('Please select a store before uploading stock');
+      }
+      
+      const response = await fetch(`/api/inventory/upload-stock?storeId=${currentStore.id}`, {
         method: "POST",
         body: formData,
         credentials: 'include', // Ensure cookies are sent for authentication
@@ -69,6 +76,13 @@ export default function StockUploadModal({ isOpen, onClose }: StockUploadModalPr
         // Invalidate and refetch to ensure UI updates immediately
         await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
         await queryClient.refetchQueries({ queryKey: ["/api/products"] });
+        
+        // Auto-close modal after successful upload
+        setTimeout(() => {
+          setFile(null);
+          setUploadResult(null);
+          onClose();
+        }, 1500);
       } else {
         toast({
           title: "Upload Completed with Errors",

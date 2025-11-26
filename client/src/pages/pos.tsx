@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/lib/pos-store";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePrefetch } from "@/hooks/use-prefetch";
+import { usePOSStoreSync } from "@/hooks/usePOSStoreSync";
 import { useLocation } from "wouter";
 import { useStore } from "@/hooks/useStore";
 import { apiRequest } from "@/lib/queryClient";
@@ -110,6 +111,9 @@ export default function POS() {
     selectedDate,
   } = usePOSStore();
   const { currentStore } = useStore();
+  
+  // Sync POS store with global store changes
+  usePOSStoreSync();
   
   // Debug infinite loop detection
   debugRender('POS', { cartItemsLength: cartItems.length, currentStore: currentStore?.id });

@@ -15,6 +15,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { getProductTypes, getCategoriesByType, type ProductType, type Category } from "@/config/product-categories";
+import { useStore } from "@/hooks/useStore";
 
 interface AIProductModalProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ export default function AIProductModal({ isOpen, onClose, searchQuery, isBarcode
   const [selectedProductType, setSelectedProductType] = useState<string>("");
   const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
   const { toast } = useToast();
+  const { currentStore } = useStore();
 
   const productTypes = getProductTypes();
 
@@ -168,12 +170,25 @@ export default function AIProductModal({ isOpen, onClose, searchQuery, isBarcode
       return;
     }
 
+    // Ensure a store is selected
+    if (!currentStore?.id) {
+      toast({
+        title: "Error",
+        description: "Please select a store before adding a product.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsAdding(true);
     try {
       await apiRequest({
         url: "/api/products",
         method: "POST",
-        body: data,
+        body: {
+          ...data,
+          storeId: currentStore.id,
+        },
       });
 
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });

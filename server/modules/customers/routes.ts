@@ -5,7 +5,7 @@ import fs from "fs";
 import { storage } from "../../storage";
 import { isAuthenticated } from "../../auth";
 import { requireRole } from "../shared/authorization";
-import { upload } from "../shared/upload";
+import { upload, dataFileUpload } from "../shared/upload";
 
 export function registerCustomerRoutes(app: Express) {
   app.get("/api/customers", async (req, res) => {
@@ -112,7 +112,7 @@ export function registerCustomerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/customers/parse-upload", upload.single("file"), async (req, res) => {
+  app.post("/api/customers/parse-upload", dataFileUpload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
@@ -122,7 +122,9 @@ export function registerCustomerRoutes(app: Express) {
       let customers: any[] = [];
 
       try {
-        const workbook = XLSX.readFile(filePath);
+        // Read file as buffer for better compatibility with ES modules
+        const fileBuffer = fs.readFileSync(filePath);
+        const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });

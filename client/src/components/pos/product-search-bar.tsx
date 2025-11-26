@@ -169,7 +169,7 @@ export default function ProductSearchBar({
     // Product found - add to cart
     if (barcodeProduct) {
       processedBarcodeRef.current = searchQuery.trim();
-      addToCart(barcodeProduct);
+      addToCart(barcodeProduct, 1, currentStore?.id);
       toast({
         title: "Product Added",
         description: `${barcodeProduct.name} added to cart automatically`,
@@ -204,13 +204,13 @@ export default function ProductSearchBar({
       return;
     }
 
-    addToCart(skuProduct);
+    addToCart(skuProduct, 1, currentStore?.id);
     toast({
       title: "Product Added",
       description: `${skuProduct.name} added to cart automatically`,
     });
     setSearchQuery("");
-  }, [skuProduct, searchQuery, addToCart, toast]);
+  }, [skuProduct, searchQuery, addToCart, toast, currentStore?.id]);
 
   // Search products by name
   const { data: searchResults = [] } = useQuery({
@@ -249,7 +249,7 @@ export default function ProductSearchBar({
         !isBarcode(searchQuery) &&
         !isSKU(searchQuery)
       ) {
-        addToCart(searchResults[0]);
+        addToCart(searchResults[0], 1, currentStore?.id);
         toast({
           title: "Product Added",
           description: `${searchResults[0].name} added to cart`,
@@ -259,7 +259,7 @@ export default function ProductSearchBar({
     }, 800); // Wait 800ms for user to finish typing
     
     return () => clearTimeout(timer);
-  }, [searchResults, searchQuery, addToCart, toast]);
+  }, [searchResults, searchQuery, addToCart, toast, currentStore?.id]);
 
   const clearSearch = () => {
     setSearchQuery("");
@@ -289,7 +289,7 @@ export default function ProductSearchBar({
     
     // If there's exactly one search result, add it to cart
     if (searchResults.length === 1) {
-      addToCart(searchResults[0]);
+      addToCart(searchResults[0], 1, currentStore?.id);
       toast({
         title: "Product Added",
         description: `${searchResults[0].name} added to cart`,

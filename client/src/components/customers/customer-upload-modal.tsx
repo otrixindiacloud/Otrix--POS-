@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useStore } from "@/hooks/useStore";
 
 interface CustomerUploadModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export default function CustomerUploadModal({ isOpen, onClose }: CustomerUploadM
   const [uploadResults, setUploadResults] = useState<CustomerRow[]>([]);
   const [step, setStep] = useState<'select' | 'preview' | 'results'>('select');
   const { toast } = useToast();
+  const { currentStore } = useStore();
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -88,6 +90,16 @@ export default function CustomerUploadModal({ isOpen, onClose }: CustomerUploadM
   const handleUpload = async () => {
     if (!previewData.length) return;
 
+    // Ensure a store is selected
+    if (!currentStore?.id) {
+      toast({
+        title: "Error",
+        description: "Please select a store before uploading customers.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsUploading(true);
     setUploadProgress(0);
     
@@ -108,6 +120,7 @@ export default function CustomerUploadModal({ isOpen, onClose }: CustomerUploadM
               address: customer.address || '',
               creditLimit: customer.creditLimit || '0.00',
               notes: customer.notes || '',
+              storeId: currentStore.id, // Add storeId
             },
           });
 
@@ -126,7 +139,9 @@ export default function CustomerUploadModal({ isOpen, onClose }: CustomerUploadM
       setUploadResults(results);
       setStep('results');
       
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      // Invalidate and refetch all customer queries to immediately show uploaded customers
+      await queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/customers"] });
       
       const successCount = results.filter(r => r.status === 'success').length;
       const errorCount = results.filter(r => r.status === 'error').length;

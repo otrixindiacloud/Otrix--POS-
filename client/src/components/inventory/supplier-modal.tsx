@@ -114,7 +114,7 @@ export default function SupplierModal({ isOpen, onClose, supplier }: SupplierMod
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md" aria-describedby="supplier-modal-description">
+      <DialogContent className="max-w-2xl" aria-describedby="supplier-modal-description">
         <DialogHeader>
           <DialogTitle>
             {supplier ? 'Edit Supplier' : 'Add New Supplier'}

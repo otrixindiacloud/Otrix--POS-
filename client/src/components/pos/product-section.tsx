@@ -206,11 +206,39 @@ export default function ProductSection({
 
   // Force refetch when currentStore changes
   useEffect(() => {
+    console.log('[POS Product Section] Store effect triggered. currentStore:', currentStore?.id, currentStore?.name);
     if (currentStore?.id) {
       console.log('[POS] Current store changed in state to:', currentStore.id, currentStore.name, '- refetching products');
       refetchStoreProducts();
     }
-  }, [currentStore?.id]);
+  }, [currentStore?.id, currentStore?.name, refetchStoreProducts]);
+  
+  // Listen for cart filtering events
+  useEffect(() => {
+    const handleCartFiltered = (event: CustomEvent) => {
+      const { removedCount } = event.detail;
+      toast({
+        title: "Cart Updated",
+        description: `${removedCount} item${removedCount > 1 ? 's' : ''} removed (not available in this store)`,
+        variant: "default",
+      });
+    };
+    
+    const handleNoStoreSelected = () => {
+      toast({
+        title: "No Store Selected",
+        description: "Please select a store before adding items to cart",
+        variant: "destructive",
+      });
+    };
+    
+    window.addEventListener('cartFilteredByStore', handleCartFiltered as EventListener);
+    window.addEventListener('noStoreSelected', handleNoStoreSelected);
+    return () => {
+      window.removeEventListener('cartFilteredByStore', handleCartFiltered as EventListener);
+      window.removeEventListener('noStoreSelected', handleNoStoreSelected);
+    };
+  }, [toast]);
 
   // Get product categories for filtering
   const { data: categories = [], isLoading: categoriesLoading } = useQuery({
@@ -504,7 +532,7 @@ export default function ProductSection({
       });
       return;
     }
-    addToCart(product);
+    addToCart(product, 1, currentStore?.id);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -594,7 +622,7 @@ export default function ProductSection({
           const productResponse = await fetch(`/api/products/${item.productId}`);
           if (productResponse.ok) {
             const product = await productResponse.json();
-            addToCart(product, item.quantity);
+            addToCart(product, item.quantity, currentStore?.id);
             addedCount++;
           }
         } catch (error) {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePOSStore } from "@/lib/pos-store";
+import { useStore } from "@/hooks/useStore";
 import { 
   Dialog, 
   DialogContent, 
@@ -21,9 +22,10 @@ import {
   Phone,
   Mail,
   MapPin,
-  X
+  X,
+  Store as StoreIcon
 } from "lucide-react";
-import type { Customer } from "@shared/schema";
+import type { Customer, Store } from "@shared/schema";
 import CustomerModal from "../customers/customer-modal";
 
 interface CustomerSearchModalProps {
@@ -35,9 +37,22 @@ export default function CustomerSearchModal({ isOpen, onClose }: CustomerSearchM
   const [searchQuery, setSearchQuery] = useState("");
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const { setCurrentCustomer } = usePOSStore();
+  const { currentStore } = useStore();
 
+  const storeQueryParam = currentStore?.id ? `?storeId=${currentStore.id}` : "";
+  
   const { data: customers = [] } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
+    queryKey: ["/api/customers", currentStore?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/customers${storeQueryParam}`);
+      if (!response.ok) throw new Error('Failed to fetch customers');
+      return response.json();
+    },
+    enabled: isOpen && !!currentStore?.id,
+  });
+
+  const { data: stores = [] } = useQuery<Store[]>({
+    queryKey: ["/api/stores/active"],
     enabled: isOpen,
   });
 
@@ -46,6 +61,12 @@ export default function CustomerSearchModal({ isOpen, onClose }: CustomerSearchM
     customer.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     customer.phone?.includes(searchQuery)
   );
+
+  const getStoreName = (storeId: number | null | undefined) => {
+    if (!storeId) return "No Store";
+    const store = stores.find(s => s.id === storeId);
+    return store?.name || `Store #${storeId}`;
+  };
 
   const handleSelectCustomer = (customer: Customer) => {
     setCurrentCustomer(customer);
@@ -88,9 +109,17 @@ export default function CustomerSearchModal({ isOpen, onClose }: CustomerSearchM
 
             {/* Add New Customer Button */}
             <div className="flex justify-between items-center">
-              <span className="text-sm text-slate-600">
-                {filteredCustomers.length} customer(s) found
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-600">
+                  {filteredCustomers.length} customer(s) found
+                </span>
+                {currentStore && (
+                  <Badge variant="outline" className="text-xs">
+                    <StoreIcon className="w-3 h-3 mr-1" />
+                    {currentStore.name}
+                  </Badge>
+                )}
+              </div>
               <Button onClick={handleAddNewCustomer} size="sm">
                 <Plus className="w-4 h-4 mr-2" />
                 Add New Customer
@@ -102,8 +131,17 @@ export default function CustomerSearchModal({ isOpen, onClose }: CustomerSearchM
               {filteredCustomers.length === 0 ? (
                 <div className="text-center py-8 text-slate-500">
                   <User className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-                  <p>No customers found</p>
-                  <p className="text-sm">Try adjusting your search or add a new customer</p>
+                  {!currentStore ? (
+                    <>
+                      <p>Please select a store</p>
+                      <p className="text-sm">Select a store to view customers</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>No customers found</p>
+                      <p className="text-sm">Try adjusting your search or add a new customer</p>
+                    </>
+                  )}
                 </div>
               ) : (
                 filteredCustomers.map((customer: Customer) => (
@@ -123,7 +161,15 @@ export default function CustomerSearchModal({ isOpen, onClose }: CustomerSearchM
                         
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
-                            <h4 className="font-medium text-slate-800">{customer.name}</h4>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-slate-800">{customer.name}</h4>
+                              {customer.storeId && (
+                                <Badge variant="secondary" className="text-xs">
+                                  <StoreIcon className="w-3 h-3 mr-1" />
+                                  {getStoreName(customer.storeId)}
+                                </Badge>
+                              )}
+                            </div>
                             <div className="flex items-center space-x-2">
                               {Number(customer.creditBalance || 0) > 0 && (
                                 <Badge variant="secondary" className="text-xs">

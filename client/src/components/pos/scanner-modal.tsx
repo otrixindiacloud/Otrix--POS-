@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { usePOSStore } from "@/lib/pos-store";
+import { useStore } from "@/hooks/useStore";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { 
@@ -23,6 +24,7 @@ import {
 
 export default function ScannerModal() {
   const { toast } = useToast();
+  const { currentStore } = useStore();
   const {
     isScannerOpen,
     closeScanner,
@@ -114,7 +116,7 @@ export default function ScannerModal() {
       
       if (result.success && result.type === 'product') {
         console.log('Adding product to cart:', result.data);
-        addToCart(result.data);
+        addToCart(result.data, 1, currentStore?.id);
         toast({
           title: "Product Added",
           description: `${result.data.name} added to cart`,

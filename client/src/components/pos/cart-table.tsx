@@ -14,6 +14,11 @@ export default function CartTable() {
   } = usePOSStore();
 
   const { toast } = useToast();
+  
+  // Debug log to see cart items
+  useEffect(() => {
+    console.log('[CartTable] Cart items updated:', cartItems.length, cartItems.map(i => `${i.name} (storeId: ${i.storeId})`));
+  }, [cartItems]);
 
   // Filter out discount items (items with SKU starting with "DISCOUNT-")
   const filteredCartItems = cartItems.filter(item => !item.sku?.startsWith('DISCOUNT-'));

@@ -25,6 +25,11 @@ export default function CartSection() {
   const { currentStore } = useStore();
   const { user } = useAuth();
 
+  // Debug log when store changes
+  useEffect(() => {
+    console.log('[CartSection] Current store changed:', currentStore?.id, currentStore?.name);
+  }, [currentStore?.id]);
+
   // Update time every second
   useEffect(() => {
     const timer = setInterval(() => {

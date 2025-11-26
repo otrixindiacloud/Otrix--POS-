@@ -17,7 +17,7 @@ import { storage } from "../../storage";
 import { db } from "../../db";
 import { isAuthenticated } from "../../auth";
 import { requireRole } from "../shared/authorization";
-import { upload } from "../shared/upload";
+import { upload, dataFileUpload } from "../shared/upload";
 import { extractInvoiceData, matchProductsWithAI } from "../../openai-service";
 
 export function registerSupplierRoutes(app: Express) {
@@ -74,7 +74,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.post("/api/suppliers/parse-upload", upload.single("file"), async (req, res) => {
+  app.post("/api/suppliers/parse-upload", dataFileUpload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
@@ -84,7 +84,9 @@ export function registerSupplierRoutes(app: Express) {
       let suppliers: any[] = [];
 
       try {
-        const workbook = XLSX.readFile(filePath);
+        // Read file as buffer for better compatibility with ES modules
+        const fileBuffer = fs.readFileSync(filePath);
+        const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });

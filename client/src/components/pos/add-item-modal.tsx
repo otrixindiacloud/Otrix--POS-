@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Store as StoreIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { Product } from "@shared/schema";
+import { useStore } from "@/hooks/useStore";
+import type { Product, StoreProduct } from "@shared/schema";
+import { Badge } from "@/components/ui/badge";
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -22,19 +24,48 @@ export default function AddItemModal({ isOpen, onClose }: AddItemModalProps) {
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const { addToCart } = usePOSStore();
   const { toast } = useToast();
+  const { currentStore } = useStore();
 
-  // Fetch all products
-  const { data: allProducts = [], isLoading: productsLoading } = useQuery<Product[]>({
+  // Fetch store-specific products with their stock and pricing
+  const { data: storeProducts = [], isLoading: productsLoading, error: storeProductsError } = useQuery<StoreProduct[]>({
+    queryKey: [`/api/stores/${currentStore?.id}/store-products`],
+    enabled: !!currentStore,
+  });
+
+  // Fetch all products for fallback (in case store products not available)
+  const { data: allProducts = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
   });
 
-  // Filter products that are in stock (quantity > 0)
+  // Log for debugging
+  console.log('[AddItemModal] Current store:', currentStore?.name, currentStore?.id);
+  console.log('[AddItemModal] Store products:', storeProducts.length);
+  console.log('[AddItemModal] All products:', allProducts.length);
+  console.log('[AddItemModal] Products loading:', productsLoading);
+  if (storeProductsError) {
+    console.error('[AddItemModal] Store products error:', storeProductsError);
+  }
+
+  // Filter store products that are in stock and active, or fallback to all products
   const inStockProducts = useMemo(() => {
-    return allProducts.filter((product) => {
+    // If we have store products, use them
+    if (storeProducts.length > 0) {
+      const filtered = storeProducts.filter((storeProduct) => {
+        const quantity = storeProduct.stockQuantity ? parseFloat(storeProduct.stockQuantity) : 0;
+        return quantity > 0 && storeProduct.isActive !== false;
+      });
+      console.log('[AddItemModal] Using store products:', filtered.length);
+      return filtered;
+    }
+    
+    // Fallback to all products if no store products available
+    const filtered = allProducts.filter((product) => {
       const quantity = product.quantity ?? product.stock ?? 0;
       return quantity > 0 && product.isActive !== false;
     });
-  }, [allProducts]);
+    console.log('[AddItemModal] Fallback to all products:', filtered.length);
+    return filtered;
+  }, [storeProducts, allProducts, currentStore]);
 
   // Handle product selection from dropdown
   const handleProductSelect = (productId: string) => {
@@ -45,6 +76,30 @@ export default function AddItemModal({ isOpen, onClose }: AddItemModalProps) {
       return;
     }
 
+    // Try to find store product first
+    const storeProduct = storeProducts.find((p) => p.productId.toString() === productId);
+    if (storeProduct) {
+      const currentStock = storeProduct.stockQuantity ? parseFloat(storeProduct.stockQuantity) : 0;
+      if (currentStock <= 0) {
+        const product = allProducts.find((p) => p.id === storeProduct.productId);
+        toast({
+          title: "Out of Stock",
+          description: `${product?.name || 'Product'} is currently out of stock in ${currentStore?.name || 'this store'}.`,
+          variant: "destructive",
+        });
+        setSelectedProductId("");
+        setItemName("");
+        setItemPrice("");
+        return;
+      }
+      const product = allProducts.find((p) => p.id === storeProduct.productId);
+      setSelectedProductId(productId);
+      setItemName(product?.name || "");
+      setItemPrice(storeProduct.price || "");
+      return;
+    }
+
+    // Fallback to regular product if no store product found
     const product = allProducts.find((p) => p.id.toString() === productId);
     if (product) {
       const currentStock = product.stock ?? product.quantity ?? 0;
@@ -106,19 +161,44 @@ export default function AddItemModal({ isOpen, onClose }: AddItemModalProps) {
 
     // If a product was selected, use it instead of creating a custom item
     if (selectedProductId) {
-      const selectedProduct = allProducts.find((p) => p.id.toString() === selectedProductId);
-      if (selectedProduct) {
-        const currentStock = selectedProduct.stock ?? selectedProduct.quantity ?? 0;
+      // Try to find store product first
+      const storeProduct = storeProducts.find((p) => p.productId.toString() === selectedProductId);
+      if (storeProduct) {
+        const currentStock = storeProduct.stockQuantity ? parseFloat(storeProduct.stockQuantity) : 0;
         if (currentStock < Number(itemQuantity)) {
+          const product = allProducts.find((p) => p.id === storeProduct.productId);
           toast({
             title: "Insufficient Stock",
-            description: `${selectedProduct.name} only has ${currentStock} units available. Requested: ${itemQuantity}`,
+            description: `${product?.name || 'Product'} only has ${currentStock} units available in ${currentStore?.name || 'this store'}. Requested: ${itemQuantity}`,
             variant: "destructive",
           });
           return;
         }
-        // Add the selected product to cart
-        addToCart(selectedProduct, Number(itemQuantity));
+        // Get full product details and use store-specific price
+        const product = allProducts.find((p) => p.id === storeProduct.productId);
+        if (product) {
+          const productWithStorePrice: Product = {
+            ...product,
+            price: storeProduct.price, // Use store-specific price
+            stock: currentStock, // Use store-specific stock
+          };
+          addToCart(productWithStorePrice, Number(itemQuantity), currentStore?.id);
+        }
+      } else {
+        // Fallback to regular product
+        const selectedProduct = allProducts.find((p) => p.id.toString() === selectedProductId);
+        if (selectedProduct) {
+          const currentStock = selectedProduct.stock ?? selectedProduct.quantity ?? 0;
+          if (currentStock < Number(itemQuantity)) {
+            toast({
+              title: "Insufficient Stock",
+              description: `${selectedProduct.name} only has ${currentStock} units available. Requested: ${itemQuantity}`,
+              variant: "destructive",
+            });
+            return;
+          }
+          addToCart(selectedProduct, Number(itemQuantity), currentStore?.id);
+        }
       }
     } else {
       // Create a custom product object for the cart
@@ -146,7 +226,7 @@ export default function AddItemModal({ isOpen, onClose }: AddItemModalProps) {
       };
 
       // Add to cart with specified quantity
-      addToCart(customProduct, Number(itemQuantity));
+      addToCart(customProduct, Number(itemQuantity), currentStore?.id);
     }
 
     toast({
@@ -172,7 +252,7 @@ export default function AddItemModal({ isOpen, onClose }: AddItemModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <Plus className="w-5 h-5 mr-2 text-primary" />
@@ -189,29 +269,58 @@ export default function AddItemModal({ isOpen, onClose }: AddItemModalProps) {
             <Select
               value={selectedProductId || "manual"}
               onValueChange={handleProductSelect}
-              disabled={productsLoading}
+              disabled={productsLoading || !currentStore}
             >
               <SelectTrigger id="productSelect" className="mt-1">
-                <SelectValue placeholder="Select an item from stock or enter manually below" />
+                <SelectValue placeholder={currentStore ? "Select an item from stock or enter manually below" : "Please select a store first"} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="manual">Enter manually</SelectItem>
                 {inStockProducts.length > 0 ? (
-                  inStockProducts.map((product) => {
-                    const currentQty = product.stock ?? product.quantity ?? 0;
-                    const price = product.price ? Number(product.price) : 0;
-                    const isLowStock = currentQty > 0 && currentQty <= 10;
-                    return (
-                      <SelectItem key={product.id} value={product.id.toString()}>
-                        <span className={isLowStock ? "text-orange-600" : ""}>
-                          {product.name} - QR {price.toFixed(2)} {isLowStock ? `(Low: ${currentQty})` : `(Qty: ${currentQty})`}
-                        </span>
-                      </SelectItem>
-                    );
+                  inStockProducts.map((item) => {
+                    // Check if it's a store product or regular product
+                    const isStoreProduct = 'productId' in item;
+                    
+                    if (isStoreProduct) {
+                      const storeProduct = item as StoreProduct;
+                      const product = allProducts.find((p) => p.id === storeProduct.productId);
+                      const currentQty = storeProduct.stockQuantity ? parseFloat(storeProduct.stockQuantity) : 0;
+                      const price = storeProduct.price ? Number(storeProduct.price) : 0;
+                      const isLowStock = currentQty > 0 && currentQty <= 10;
+                      return (
+                        <SelectItem key={storeProduct.productId} value={storeProduct.productId.toString()}>
+                          <div className="flex items-center gap-2">
+                            <span className={isLowStock ? "text-orange-600 font-medium" : ""}>
+                              {product?.name || 'Unknown'} - QR {price.toFixed(2)}
+                            </span>
+                            <Badge variant={isLowStock ? "destructive" : "secondary"} className="text-xs">
+                              {isLowStock ? `Low: ${currentQty}` : `${currentQty}`}
+                            </Badge>
+                          </div>
+                        </SelectItem>
+                      );
+                    } else {
+                      const product = item as Product;
+                      const currentQty = product.stock ?? product.quantity ?? 0;
+                      const price = product.price ? Number(product.price) : 0;
+                      const isLowStock = currentQty > 0 && currentQty <= 10;
+                      return (
+                        <SelectItem key={product.id} value={product.id.toString()}>
+                          <div className="flex items-center gap-2">
+                            <span className={isLowStock ? "text-orange-600 font-medium" : ""}>
+                              {product.name} - QR {price.toFixed(2)}
+                            </span>
+                            <Badge variant={isLowStock ? "destructive" : "secondary"} className="text-xs">
+                              {isLowStock ? `Low: ${currentQty}` : `${currentQty}`}
+                            </Badge>
+                          </div>
+                        </SelectItem>
+                      );
+                    }
                   })
                 ) : (
                   <SelectItem value="no-stock" disabled>
-                    No items in stock
+                    {productsLoading ? "Loading products..." : (currentStore ? "No items in stock at this store" : "No store selected")}
                   </SelectItem>
                 )}
               </SelectContent>

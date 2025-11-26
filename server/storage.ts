@@ -278,193 +278,215 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private seedingComplete = false;
+  private seedingPromise: Promise<void> | null = null;
+
   constructor() {
-    // Initialize with seed data if database is empty
-    this.seedDataIfEmpty();
+    // Initialize with seed data if database is empty (non-blocking)
+    this.initializeSeeding();
+  }
+
+  private initializeSeeding() {
+    if (!this.seedingPromise) {
+      this.seedingPromise = this.seedDataIfEmpty()
+        .then(() => {
+          this.seedingComplete = true;
+          console.log("✅ Database initialization complete");
+        })
+        .catch(error => {
+          this.seedingComplete = true; // Mark as complete even on error to avoid retries
+          console.error("Error during database seeding (non-critical):", error);
+        });
+    }
   }
 
   private async seedDataIfEmpty() {
     try {
       const bcrypt = await import("bcryptjs");
       
-      // Check if we have any users and seed demo users if empty
+      // Quick check if we have any users - if yes, skip seeding
       const existingUsers = await db.select().from(users).limit(1);
-      if (existingUsers.length === 0) {
-        const demoUsers = [
-          { username: "admin", password: "admin", firstName: "Admin", lastName: "User", role: "admin" },
-          { username: "manager", password: "manager", firstName: "Manager", lastName: "User", role: "manager" },
-          { username: "supervisor", password: "supervisor", firstName: "Supervisor", lastName: "User", role: "supervisor" },
-          { username: "cashier", password: "cashier", firstName: "Cashier", lastName: "User", role: "cashier" },
-          { username: "delivery", password: "delivery", firstName: "Delivery", lastName: "User", role: "delivery" },
-          { username: "customer", password: "customer", firstName: "Customer", lastName: "User", role: "customer" },
-        ];
-
-        for (const user of demoUsers) {
-          const hashedPassword = await bcrypt.default.hash(user.password, 10);
-          await db.insert(users).values({
-            username: user.username,
-            password: hashedPassword,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            role: user.role,
-            email: `${user.username}@example.com`,
-            isActive: true,
-          });
-        }
-        console.log("Demo users created successfully");
+      if (existingUsers.length > 0) {
+        console.log("✅ Users already exist in database, skipping seed");
+        return;
       }
+      
+      console.log("No users found in database. Creating demo users...");
+      const demoUsers = [
+        { username: "admin", password: "admin", firstName: "Admin", lastName: "User", role: "admin" },
+        { username: "manager", password: "manager", firstName: "Manager", lastName: "User", role: "manager" },
+        { username: "supervisor", password: "supervisor", firstName: "Supervisor", lastName: "User", role: "supervisor" },
+        { username: "cashier", password: "cashier", firstName: "Cashier", lastName: "User", role: "cashier" },
+        { username: "delivery", password: "delivery", firstName: "Delivery", lastName: "User", role: "delivery" },
+        { username: "customer", password: "customer", firstName: "Customer", lastName: "User", role: "customer" },
+      ];
+
+      for (const user of demoUsers) {
+        const hashedPassword = await bcrypt.default.hash(user.password, 10);
+        await db.insert(users).values({
+          username: user.username,
+          password: hashedPassword,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          email: `${user.username}@example.com`,
+          isActive: true,
+        });
+      }
+      console.log("✅ Demo users created successfully");
 
       // Check if we have any customers and seed if empty
       const existingCustomers = await db.select().from(customers).limit(1);
       if (existingCustomers.length === 0) {
-        // Seed some sample customers
-        await db.insert(customers).values([
-          {
-            name: "John Doe",
-            email: "john@example.com",
-            phone: "555-0123",
-            creditLimit: "1000.00",
-            creditBalance: "0.00",
-            isActive: true,
-          },
-          {
-            name: "Jane Smith",
-            email: "jane@example.com",
-            phone: "555-0456",
-            creditLimit: "500.00",
-            creditBalance: "100.00",
-            isActive: true,
-          },
-        ]);
+      // Seed some sample customers
+      await db.insert(customers).values([
+        {
+          name: "John Doe",
+          email: "john@example.com",
+          phone: "555-0123",
+          creditLimit: "1000.00",
+          creditBalance: "0.00",
+          isActive: true,
+        },
+        {
+          name: "Jane Smith",
+          email: "jane@example.com",
+          phone: "555-0456",
+          creditLimit: "500.00",
+          creditBalance: "100.00",
+          isActive: true,
+        },
+      ]);
 
-        // Seed some sample products with mock image URLs
-        await db.insert(products).values([
-          {
-            sku: "APPLE-001",
-            name: "Red Apples",
-            description: "Fresh red apples per pound",
-            price: "3.99",
-            cost: "2.00",
-            stock: 50,
-            barcode: "1234567890123",
-            imageUrl: "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&h=400&fit=crop",
-            category: "Fruits",
-            isActive: true,
-          },
-          {
-            sku: "BANANA-001",
-            name: "Bananas",
-            description: "Yellow bananas per bunch",
-            price: "2.49",
-            cost: "1.25",
-            stock: 30,
-            barcode: "1234567890124",
-            imageUrl: "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&h=400&fit=crop",
-            category: "Fruits",
-            isActive: true,
-          },
-          {
-            sku: "MILK-001",
-            name: "Whole Milk",
-            description: "1 gallon whole milk",
-            price: "4.99",
-            cost: "3.50",
-            stock: 20,
-            barcode: "1234567890125",
-            imageUrl: "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400&h=400&fit=crop",
-            category: "Dairy",
-            isActive: true,
-          },
-          {
-            sku: "BREAD-001",
-            name: "White Bread",
-            description: "Sliced white bread loaf",
-            price: "2.99",
-            cost: "1.80",
-            stock: 25,
-            barcode: "1234567890126",
-            imageUrl: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&h=400&fit=crop",
-            category: "Bakery",
-            isActive: true,
-          },
-          {
-            sku: "COFFEE-001",
-            name: "Premium Coffee Beans",
-            description: "Arabica coffee beans - 1lb bag",
-            price: "12.99",
-            cost: "7.50",
-            stock: 40,
-            barcode: "1234567890127",
-            imageUrl: "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400&h=400&fit=crop",
-            category: "Beverages",
-            isActive: true,
-          },
-          {
-            sku: "PASTA-001",
-            name: "Spaghetti Pasta",
-            description: "Italian durum wheat pasta - 500g",
-            price: "3.49",
-            cost: "1.75",
-            stock: 60,
-            barcode: "1234567890128",
-            imageUrl: "https://images.unsplash.com/photo-1551892374-ecf8050cf384?w=400&h=400&fit=crop",
-            category: "Pantry",
-            isActive: true,
-          },
-          {
-            sku: "CHEESE-001",
-            name: "Cheddar Cheese",
-            description: "Aged cheddar cheese block - 8oz",
-            price: "5.99",
-            cost: "3.25",
-            stock: 35,
-            barcode: "1234567890129",
-            imageUrl: "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=400&h=400&fit=crop",
-            category: "Dairy",
-            isActive: true,
-          },
-          {
-            sku: "CHIPS-001",
-            name: "Potato Chips",
-            description: "Crispy salted potato chips - family size",
-            price: "4.49",
-            cost: "2.10",
-            stock: 50,
-            barcode: "1234567890130",
-            imageUrl: "https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&h=400&fit=crop",
-            category: "Snacks",
-            isActive: true,
-          },
-          {
-            sku: "JUICE-001",
-            name: "Orange Juice",
-            description: "Fresh squeezed orange juice - 64oz",
-            price: "6.99",
-            cost: "4.25",
-            stock: 25,
-            barcode: "1234567890131",
-            imageUrl: "https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=400&h=400&fit=crop",
-            category: "Beverages",
-            isActive: true,
-          },
-          {
-            sku: "SOAP-001",
-            name: "Hand Soap",
-            description: "Antibacterial hand soap - 16oz pump",
-            price: "3.99",
-            cost: "1.90",
-            stock: 45,
-            barcode: "1234567890132",
-            imageUrl: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=400&fit=crop",
-            category: "Household",
-            isActive: true,
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error("Error seeding data:", error);
+      // Seed some sample products with mock image URLs
+      await db.insert(products).values([
+        {
+          sku: "APPLE-001",
+          name: "Red Apples",
+          description: "Fresh red apples per pound",
+          price: "3.99",
+          cost: "2.00",
+          stock: 50,
+          barcode: "1234567890123",
+          imageUrl: "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&h=400&fit=crop",
+          category: "Fruits",
+          isActive: true,
+        },
+        {
+          sku: "BANANA-001",
+          name: "Bananas",
+          description: "Yellow bananas per bunch",
+          price: "2.49",
+          cost: "1.25",
+          stock: 30,
+          barcode: "1234567890124",
+          imageUrl: "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&h=400&fit=crop",
+          category: "Fruits",
+          isActive: true,
+        },
+        {
+          sku: "MILK-001",
+          name: "Whole Milk",
+          description: "1 gallon whole milk",
+          price: "4.99",
+          cost: "3.50",
+          stock: 20,
+          barcode: "1234567890125",
+          imageUrl: "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400&h=400&fit=crop",
+          category: "Dairy",
+          isActive: true,
+        },
+        {
+          sku: "BREAD-001",
+          name: "White Bread",
+          description: "Sliced white bread loaf",
+          price: "2.99",
+          cost: "1.80",
+          stock: 25,
+          barcode: "1234567890126",
+          imageUrl: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&h=400&fit=crop",
+          category: "Bakery",
+          isActive: true,
+        },
+        {
+          sku: "COFFEE-001",
+          name: "Premium Coffee Beans",
+          description: "Arabica coffee beans - 1lb bag",
+          price: "12.99",
+          cost: "7.50",
+          stock: 40,
+          barcode: "1234567890127",
+          imageUrl: "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400&h=400&fit=crop",
+          category: "Beverages",
+          isActive: true,
+        },
+        {
+          sku: "PASTA-001",
+          name: "Spaghetti Pasta",
+          description: "Italian durum wheat pasta - 500g",
+          price: "3.49",
+          cost: "1.75",
+          stock: 60,
+          barcode: "1234567890128",
+          imageUrl: "https://images.unsplash.com/photo-1551892374-ecf8050cf384?w=400&h=400&fit=crop",
+          category: "Pantry",
+          isActive: true,
+        },
+        {
+          sku: "CHEESE-001",
+          name: "Cheddar Cheese",
+          description: "Aged cheddar cheese block - 8oz",
+          price: "5.99",
+          cost: "3.25",
+          stock: 35,
+          barcode: "1234567890129",
+          imageUrl: "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=400&h=400&fit=crop",
+          category: "Dairy",
+          isActive: true,
+        },
+        {
+          sku: "CHIPS-001",
+          name: "Potato Chips",
+          description: "Crispy salted potato chips - family size",
+          price: "4.49",
+          cost: "2.10",
+          stock: 50,
+          barcode: "1234567890130",
+          imageUrl: "https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&h=400&fit=crop",
+          category: "Snacks",
+          isActive: true,
+        },
+        {
+          sku: "JUICE-001",
+          name: "Orange Juice",
+          description: "Fresh squeezed orange juice - 64oz",
+          price: "6.99",
+          cost: "4.25",
+          stock: 25,
+          barcode: "1234567890131",
+          imageUrl: "https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=400&h=400&fit=crop",
+          category: "Beverages",
+          isActive: true,
+        },
+        {
+          sku: "SOAP-001",
+          name: "Hand Soap",
+          description: "Antibacterial hand soap - 16oz pump",
+          price: "3.99",
+          cost: "1.90",
+          stock: 45,
+          barcode: "1234567890132",
+          imageUrl: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=400&fit=crop",
+          category: "Household",
+          isActive: true,
+        },
+      ]);
+      console.log("✅ Demo products seeded successfully");
     }
+  } catch (error) {
+    console.error("Error seeding data:", error);
   }
+}
 
   // User methods (Authentication)
   async getUser(id: number): Promise<User | undefined> {
@@ -537,31 +559,14 @@ export class DatabaseStorage implements IStorage {
   async getCustomersByStore(storeId: number): Promise<Customer[]> {
     console.log(`[getCustomersByStore] Fetching customers for store ${storeId}`);
     
-    // Get distinct customers who have transactions at this store
-    const customerIds = await db
-      .selectDistinct({ customerId: transactions.customerId })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.storeId, storeId),
-          isNotNull(transactions.customerId)
-        )
-      );
-
-    if (customerIds.length === 0) {
-      console.log(`[getCustomersByStore] No customers found for store ${storeId}`);
-      return [];
-    }
-
-    const ids = customerIds.map(row => row.customerId).filter((id): id is number => id !== null);
-    
+    // Filter customers by storeId
     const storeCustomers = await db
       .select()
       .from(customers)
       .where(
         and(
           eq(customers.isActive, true),
-          sql`${customers.id} IN ${sql.raw(`(${ids.join(',')})`)}` 
+          eq(customers.storeId, storeId)
         )
       )
       .orderBy(desc(customers.id));
@@ -1271,12 +1276,13 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  async submitStockTaking(items: any[], stockDate?: string): Promise<{ session: StockTakingSession; newProducts: number; updatedProducts: number }> {
+  async submitStockTaking(items: any[], stockDate?: string, storeId?: number): Promise<{ session: StockTakingSession; newProducts: number; updatedProducts: number }> {
     let newProducts = 0;
     let updatedProducts = 0;
     
     const sessionDate = stockDate || new Date().toISOString().slice(0, 10);
     const session = await this.createStockTakingSession({
+      storeId: storeId || null,
       sessionDate,
       status: 'completed',
       totalItems: items.length,
@@ -1286,6 +1292,7 @@ export class DatabaseStorage implements IStorage {
     for (const item of items) {
       await this.createStockTakingItem({
         sessionId: session.id,
+        storeId: storeId || null,
         productId: item.productId || null,
         sku: item.sku,
         barcode: item.barcode || null,
@@ -1295,6 +1302,7 @@ export class DatabaseStorage implements IStorage {
         actualQty: item.actualQty.toString(),
         variance: item.variance.toString(),
         costPrice: item.costPrice || '0.00',
+        sellingPrice: item.sellingPrice || '0.00',
         varianceValue: item.varianceValue || '0.00',
         notes: item.notes || null,
         isNewProduct: !item.productId,
@@ -1302,26 +1310,62 @@ export class DatabaseStorage implements IStorage {
 
       if (!item.productId) {
         // Create new product
-        await this.createProduct({
+        const newProduct = await this.createProduct({
           sku: item.sku,
           name: item.name,
           description: `Product created during stock taking on ${sessionDate}`,
-          price: item.costPrice || '0.00',
+          price: item.sellingPrice || '0.00',
           cost: item.costPrice || '0.00',
+          costPrice: item.costPrice || '0.00',
           stock: parseInt(item.actualQty) || 0,
           barcode: item.barcode || null,
           isActive: true,
         });
         newProducts++;
+        
+        // If storeId provided, also create store_product entry
+        if (storeId && newProduct.id) {
+          await this.createStoreProduct({
+            storeId: storeId,
+            productId: newProduct.id,
+            price: item.sellingPrice || '0.00',
+            costPrice: item.costPrice || '0.00',
+            stockQuantity: item.actualQty.toString(),
+            reorderLevel: '5',
+            isActive: true,
+          });
+        }
       } else {
         // Update existing product stock
-        const existingProduct = await this.getProduct(item.productId);
-        if (existingProduct) {
-          await this.updateProduct(item.productId, {
-            stock: parseInt(item.actualQty) || 0,
-          });
-          updatedProducts++;
+        if (storeId) {
+          // Update store-specific stock
+          const storeProduct = await this.getStoreProduct(storeId, item.productId);
+          if (storeProduct) {
+            await this.updateStoreProduct(storeId, item.productId, {
+              stockQuantity: parseInt(item.actualQty) || 0,
+            });
+          } else {
+            // Create store product if it doesn't exist
+            await this.createStoreProduct({
+              storeId: storeId,
+              productId: item.productId,
+              price: item.sellingPrice || '0.00',
+              costPrice: item.costPrice || '0.00',
+              stockQuantity: item.actualQty.toString(),
+              reorderLevel: '5',
+              isActive: true,
+            });
+          }
+        } else {
+          // Update base product stock
+          const existingProduct = await this.getProduct(item.productId);
+          if (existingProduct) {
+            await this.updateProduct(item.productId, {
+              stock: parseInt(item.actualQty) || 0,
+            });
+          }
         }
+        updatedProducts++;
       }
     }
 
@@ -1333,13 +1377,18 @@ export class DatabaseStorage implements IStorage {
     return { session, newProducts, updatedProducts };
   }
 
-  async getStockTakingComparison(date: string): Promise<any[]> {
+  async getStockTakingComparison(date: string, storeId?: number): Promise<any[]> {
     const comparisonData: any[] = [];
+    
+    // Build where clause for stock taking items
+    const whereClause = storeId 
+      ? sql`DATE(${stockTakingItems.createdAt}) = ${date} AND ${stockTakingItems.storeId} = ${storeId}`
+      : sql`DATE(${stockTakingItems.createdAt}) = ${date}`;
     
     const stockTakingItemsResult = await db
       .select()
       .from(stockTakingItems)
-      .where(sql`DATE(${stockTakingItems.createdAt}) = ${date}`);
+      .where(whereClause);
 
     const countedItemsMap = new Map();
     stockTakingItemsResult.forEach((item) => {
@@ -1351,23 +1400,75 @@ export class DatabaseStorage implements IStorage {
     const countedItems = Array.from(countedItemsMap.entries());
     for (const [productId, item] of countedItems) {
       comparisonData.push({
-        ...item,
+        productId: item.productId,
+        sku: item.sku,
+        barcode: item.barcode,
+        name: item.name,
+        systemQty: item.systemQty,
+        countedQty: item.actualQty, // Map actualQty to countedQty for frontend
+        variance: item.variance,
+        varianceValue: item.varianceValue,
+        costPrice: item.costPrice,
         status: 'counted'
       });
     }
 
-    // Add products that weren't counted
-    const allProducts = await db.select().from(products).where(eq(products.isActive, true));
+    // Add products that weren't counted as "missing"
+    // Filter by store if storeId is provided
+    let allProducts;
+    if (storeId) {
+      // Get store-specific products
+      allProducts = await db
+        .select({
+          id: products.id,
+          sku: products.sku,
+          barcode: products.barcode,
+          name: products.name,
+          stock: storeProducts.stockQuantity,
+          costPrice: storeProducts.costPrice,
+        })
+        .from(products)
+        .innerJoin(storeProducts, eq(storeProducts.productId, products.id))
+        .where(
+          and(
+            eq(storeProducts.storeId, storeId),
+            eq(products.isActive, true),
+            eq(storeProducts.isActive, true)
+          )
+        );
+    } else {
+      // Get all active products
+      allProducts = await db
+        .select({
+          id: products.id,
+          sku: products.sku,
+          barcode: products.barcode,
+          name: products.name,
+          stock: products.stock,
+          costPrice: products.costPrice,
+        })
+        .from(products)
+        .where(eq(products.isActive, true));
+    }
+    
     for (const product of allProducts) {
       if (!countedItemsMap.has(product.id)) {
+        const systemQty = parseFloat(String(product.stock || 0));
+        const costPrice = parseFloat(String(product.costPrice || '0'));
+        const variance = -systemQty;
+        const varianceValue = variance * costPrice;
+        
         comparisonData.push({
           productId: product.id,
           sku: product.sku,
+          barcode: product.barcode,
           name: product.name,
-          systemQty: product.stock?.toString() || '0',
-          actualQty: '0',
-          variance: (-(product.stock || 0)).toString(),
-          status: 'not_counted'
+          systemQty: systemQty.toString(),
+          countedQty: '0',
+          variance: variance.toString(),
+          varianceValue: varianceValue.toFixed(2),
+          costPrice: costPrice.toString(),
+          status: 'missing'
         });
       }
     }
@@ -1813,9 +1914,9 @@ export class DatabaseStorage implements IStorage {
           basePrice: products.price,
           storePrice: storeProducts.price,
           baseCost: products.cost,
-          storeCost: storeProducts.cost,
+          storeCost: storeProducts.costPrice,
           baseStock: products.stock,
-          storeStock: storeProducts.stock,
+          storeStock: storeProducts.stockQuantity,
           quantity: products.quantity,
           barcode: products.barcode,
           imageUrl: products.imageUrl,
@@ -1850,7 +1951,8 @@ export class DatabaseStorage implements IStorage {
         price: row.storePrice || row.basePrice || '0.00',
         cost: row.storeCost || row.baseCost || null,
         // Use store-specific stock first, then fall back to base stock
-        stock: row.storeStock ?? row.baseStock ?? 0,
+        // Convert decimal/string to number for stock
+        stock: row.storeStock ? (typeof row.storeStock === 'string' ? parseInt(row.storeStock) : Number(row.storeStock)) : row.baseStock ?? 0,
         quantity: row.quantity,
         barcode: row.barcode,
         imageUrl: row.imageUrl,
